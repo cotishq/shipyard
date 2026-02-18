@@ -2,7 +2,6 @@ package executor
 
 import (
 	"log"
-	"time"
 
 	"github.com/cotishq/shipyard/internal/db"
 )
@@ -12,14 +11,15 @@ import (
 func ProcessNextDeployment() {
 	log.Println("checking for deployments")
 
-	var id string
+	var id, repoURL, buildCommand string
 
 	err := db.DB.QueryRow(`
-	SELECT id FROM deployments
+	SELECT id, repo_url, build_command
+    FROM deployments
 	WHERE status = 'QUEUED'
 	ORDER BY created_at
 	LIMIT 1
-	`).Scan(&id)
+	`).Scan(&id, &repoURL, &buildCommand)
 
 	if err != nil {
 		return
@@ -38,7 +38,7 @@ func ProcessNextDeployment() {
 		return
 	}
 
-	time.Sleep(5 * time.Second)
+	err = RunBuild(repoURL, buildCommand)
 
 	_, err = db.DB.Exec(`
 	UPDATE deployments
