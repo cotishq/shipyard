@@ -13,7 +13,7 @@ func RunBuild(repoURL string, buildCommand string) error {
 	    "-w", "/workspace",
 	    "node:20",
 	    "bash", "-c",
-	    "git clone "+repoURL+"repo && cd repo && npm install && "+buildCommand,
+	    "git clone "+repoURL+".git repo && cd repo && npm install && "+buildCommand,
 	)
 
 	output, err := cmd.CombinedOutput()

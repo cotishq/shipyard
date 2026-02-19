@@ -40,6 +40,22 @@ func ProcessNextDeployment() {
 
 	err = RunBuild(repoURL, buildCommand)
 
+	if err != nil {
+		log.Println("Build failed:", err)
+	
+		_, err = db.DB.Exec(`
+		UPDATE deployments
+		SET status = 'FAILED'
+		WHERE id = $1
+		`, id)
+	
+		if err != nil {
+			log.Println("failed to update status:", err)
+		}
+	
+		return
+	}
+
 	_, err = db.DB.Exec(`
 	UPDATE deployments
 	SET status = 'READY'
