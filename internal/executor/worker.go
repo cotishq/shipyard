@@ -11,15 +11,15 @@ import (
 func ProcessNextDeployment() {
 	log.Println("checking for deployments")
 
-	var id, repoURL, buildCommand string
+	var id, repoURL, buildCommand, outputDir string
 
 	err := db.DB.QueryRow(`
-	SELECT id, repo_url, build_command
+	SELECT id, repo_url, build_command, output_dir
     FROM deployments
 	WHERE status = 'QUEUED'
 	ORDER BY created_at
 	LIMIT 1
-	`).Scan(&id, &repoURL, &buildCommand)
+	`).Scan(&id, &repoURL, &buildCommand, &outputDir)
 
 	if err != nil {
 		return
@@ -38,7 +38,7 @@ func ProcessNextDeployment() {
 		return
 	}
 
-	err = RunBuild(repoURL, buildCommand)
+	err = RunBuild(id, repoURL, buildCommand, outputDir)
 
 	if err != nil {
 		log.Println("Build failed:", err)

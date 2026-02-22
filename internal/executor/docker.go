@@ -2,18 +2,26 @@ package executor
 
 import (
 	"log"
+	"os"
 	"os/exec"
 )
 
-func RunBuild(repoURL string, buildCommand string) error {
+func RunBuild(deploymentID , repoURL , buildCommand, outputDir string ) error {
 	log.Println("Starting Docker build...")
 
+	hostDir := "/tmp/" + deploymentID
+
+	err := os.Mkdir(hostDir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
 	cmd := exec.Command("docker","run", "--rm",
-        "-v", "/tmp:/workspace", 
+        "-v", hostDir+":/workspace", 
 	    "-w", "/workspace",
 	    "node:20",
 	    "bash", "-c",
-	    "git clone "+repoURL+".git repo && cd repo && npm install && "+buildCommand,
+	    "git clone "+repoURL+".git repo && cd repo && npm install && "+buildCommand+" && if [ -d "+outputDir+" ]; then cp -r "+outputDir+"/* /workspace/; else echo 'No output dir'; fi",
 	)
 
 	output, err := cmd.CombinedOutput()
