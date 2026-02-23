@@ -21,7 +21,7 @@ func RunBuild(deploymentID , repoURL , buildCommand, outputDir string ) error {
 	    "-w", "/workspace",
 	    "node:20",
 	    "bash", "-c",
-	    "git clone "+repoURL+".git repo && cd repo && npm install && "+buildCommand+" && if [ -d "+outputDir+" ]; then cp -r "+outputDir+"/* /workspace/; else echo 'No output dir'; fi",
+	    "git clone "+repoURL+".git repo && cd repo && "+buildCommand+" && if [ -z \""+outputDir+"\" ]; then cp -r * /workspace/; else cp -r "+outputDir+"/* /workspace/; fi",
 	)
 
 	output, err := cmd.CombinedOutput()

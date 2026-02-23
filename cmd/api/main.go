@@ -20,6 +20,8 @@ func main() {
 
 	e.POST("/deploy", api.CreateDeployment(db.DB))
 
+	e.Static("/deployments", "/tmp")
+
 	log.Println("server running on :8080")
 	e.Start(":8080")
 }
