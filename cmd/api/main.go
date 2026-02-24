@@ -23,6 +23,8 @@ func main() {
 	})
 
 	e.POST("/deploy", api.CreateDeployment(db.DB))
+    e.GET("/:id", api.ServeDeployment)
+	e.GET("/:id/*", api.ServeDeployment)
 
 	e.Static("/deployments", "/tmp")
 

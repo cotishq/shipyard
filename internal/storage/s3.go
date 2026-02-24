@@ -52,3 +52,7 @@ func UploadFolder(deploymentID string) error {
 		return nil
 	})
 }
+
+func GetOptions() minio.GetObjectOptions {
+	return minio.GetObjectOptions{}
+}
