@@ -28,6 +28,6 @@ func main() {
 
 	e.Static("/deployments", "/tmp")
 
-	log.Println("server running on :8080")
+	log.Println("server running successfully on :8080")
 	e.Start(":8080")
 }
