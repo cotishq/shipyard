@@ -39,21 +39,47 @@ func ProcessNextDeployment() {
 
 	err = RunBuild(id, repoURL, buildCommand, outputDir)
 
-	if err != nil {
-		log.Println("Build failed:", err)
+if err != nil {
+	log.Println("Build failed:", err)
 
-		_, err = db.DB.Exec(`
-		UPDATE deployments
-		SET status = 'FAILED'
+	var attemptCount, maxAttempts int
+
+	err2 := db.DB.QueryRow(`
+		SELECT attempt_count, max_attempts
+		FROM deployments
 		WHERE id = $1
-		`, id)
+	`, id).Scan(&attemptCount, &maxAttempts)
 
-		if err != nil {
-			log.Println("failed to update status:", err)
-		}
-
+	if err2 != nil {
+		log.Println("failed to fetch attempts:", err2)
 		return
 	}
+
+	attemptCount++
+
+	if attemptCount < maxAttempts {
+		log.Println("Retrying deployment:", id)
+
+		_, err = db.DB.Exec(`
+			UPDATE deployments
+			SET attempt_count = $1,
+			    status = 'QUEUED'
+			WHERE id = $2
+		`, attemptCount, id)
+
+	} else {
+		log.Println("Max retries reached:", id)
+
+		_, err = db.DB.Exec(`
+			UPDATE deployments
+			SET attempt_count = $1,
+			    status = 'FAILED'
+			WHERE id = $2
+		`, attemptCount, id)
+	}
+
+	return
+}
 
 	err = storage.UploadFolder(id)
 	if err != nil {
