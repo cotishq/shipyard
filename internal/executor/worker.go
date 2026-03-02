@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/cotishq/shipyard/internal/db"
+	"github.com/cotishq/shipyard/internal/logs"
 	"github.com/cotishq/shipyard/internal/storage"
 )
 
@@ -25,6 +26,7 @@ func ProcessNextDeployment() {
 	}
 
 	log.Println("Processing deployment:", id)
+	logs.AddLog(id, "Starting deployment")
 
 	_, err = db.DB.Exec(`
 	UPDATE deployments
@@ -37,49 +39,54 @@ func ProcessNextDeployment() {
 		return
 	}
 
+	logs.AddLog(id, "Running build...")
 	err = RunBuild(id, repoURL, buildCommand, outputDir)
 
-if err != nil {
-	log.Println("Build failed:", err)
+	if err != nil {
+		log.Println("Build failed:", err)
+		logs.AddLog(id, "Build failed: "+err.Error())
 
-	var attemptCount, maxAttempts int
+		var attemptCount, maxAttempts int
 
-	err2 := db.DB.QueryRow(`
+		err2 := db.DB.QueryRow(`
 		SELECT attempt_count, max_attempts
 		FROM deployments
 		WHERE id = $1
 	`, id).Scan(&attemptCount, &maxAttempts)
 
-	if err2 != nil {
-		log.Println("failed to fetch attempts:", err2)
-		return
-	}
+		if err2 != nil {
+			log.Println("failed to fetch attempts:", err2)
+			return
+		}
 
-	attemptCount++
+		attemptCount++
 
-	if attemptCount < maxAttempts {
-		log.Println("Retrying deployment:", id)
+		if attemptCount < maxAttempts {
+			log.Println("Retrying deployment:", id)
+			logs.AddLog(id, "Retrying deployment")
 
-		_, err = db.DB.Exec(`
+			_, err = db.DB.Exec(`
 			UPDATE deployments
 			SET attempt_count = $1,
 			    status = 'QUEUED'
 			WHERE id = $2
 		`, attemptCount, id)
 
-	} else {
-		log.Println("Max retries reached:", id)
+		} else {
+			log.Println("Max retries reached:", id)
 
-		_, err = db.DB.Exec(`
+			_, err = db.DB.Exec(`
 			UPDATE deployments
 			SET attempt_count = $1,
 			    status = 'FAILED'
 			WHERE id = $2
 		`, attemptCount, id)
+		}
+
+		return
 	}
 
-	return
-}
+	logs.AddLog(id, "Build successful")
 
 	err = storage.UploadFolder(id)
 	if err != nil {
@@ -105,5 +112,6 @@ if err != nil {
 		return
 	}
 
+	logs.AddLog(id, "Deployment ready")
 	log.Println("Deployment ready:", id)
 }

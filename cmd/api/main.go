@@ -10,20 +10,20 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-
 func main() {
 	db.Init()
-	
+
 	storage.Init()
 
 	e := echo.New()
-	
+
 	e.GET("/", func(c *echo.Context) error {
 		return c.String(http.StatusOK, "shipyard running")
 	})
 
+	e.GET("/logs/:id", api.GetLogs)
 	e.POST("/deploy", api.CreateDeployment(db.DB))
-    e.GET("/:id", api.ServeDeployment)
+	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
 
 	e.Static("/deployments", "/tmp")
