@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
@@ -23,11 +24,14 @@ func main() {
 
 	e.GET("/logs/:id", api.GetLogs)
 	e.POST("/deploy", api.CreateDeployment(db.DB))
+	e.GET("/deployments/:id", api.GetDeployment)
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
 
 	e.Static("/deployments", "/tmp")
 
-	log.Println("server running successfully on :8080")
-	e.Start(":8080")
+	log.Println("server running successfully on :8082")
+	if err := e.Start(":8082"); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal("failed to start api server:", err)
+	}
 }

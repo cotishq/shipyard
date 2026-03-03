@@ -27,6 +27,12 @@ func ServeDeployment(c *echo.Context) error {
 	if err != nil {
 		return c.String(http.StatusNotFound, "file not found")
 	}
+	defer object.Close()
+
+	// MinIO GetObject may return a reader before object existence is checked.
+	if _, err := object.Stat(); err != nil {
+		return c.String(http.StatusNotFound, "file not found")
+	}
 
 	contentType := "text/html"
 	if strings.HasSuffix(filePath, ".css") {
