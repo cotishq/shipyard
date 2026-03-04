@@ -28,14 +28,23 @@ func ProcessNextDeployment() {
 	log.Println("Processing deployment:", id)
 	logs.AddLog(id, "Starting deployment")
 
-	_, err = db.DB.Exec(`
+	result, err := db.DB.Exec(`
 	UPDATE deployments
 	SET status = 'BUILDING'
-	WHERE id = $1
+	WHERE id = $1 AND status = 'QUEUED'
 	`, id)
 
 	if err != nil {
 		log.Println("failed to update status:", err)
+		return
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		log.Println("failed to read affected rows:", err)
+		return
+	}
+	if rows == 0 {
+		log.Println("invalid state transition, skipping:", id)
 		return
 	}
 
@@ -61,26 +70,51 @@ func ProcessNextDeployment() {
 
 		attemptCount++
 
+		result, err = db.DB.Exec(`
+			UPDATE deployments
+			SET attempt_count = $1,
+			    status = 'FAILED'
+			WHERE id = $2 AND status = 'BUILDING'
+		`, attemptCount, id)
+		if err != nil {
+			log.Println("failed to update failed status:", err)
+			return
+		}
+		rows, err = result.RowsAffected()
+		if err != nil {
+			log.Println("failed to read affected rows:", err)
+			return
+		}
+		if rows == 0 {
+			log.Println("invalid state transition, skipping:", id)
+			return
+		}
+
 		if attemptCount < maxAttempts {
 			log.Println("Retrying deployment:", id)
 			logs.AddLog(id, "Retrying deployment")
 
-			_, err = db.DB.Exec(`
+			result, err = db.DB.Exec(`
 			UPDATE deployments
 			SET attempt_count = $1,
 			    status = 'QUEUED'
-			WHERE id = $2
+			WHERE id = $2 AND status = 'FAILED'
 		`, attemptCount, id)
-
+			if err != nil {
+				log.Println("failed to queue retry:", err)
+				return
+			}
+			rows, err = result.RowsAffected()
+			if err != nil {
+				log.Println("failed to read affected rows:", err)
+				return
+			}
+			if rows == 0 {
+				log.Println("invalid state transition, skipping:", id)
+				return
+			}
 		} else {
 			log.Println("Max retries reached:", id)
-
-			_, err = db.DB.Exec(`
-			UPDATE deployments
-			SET attempt_count = $1,
-			    status = 'FAILED'
-			WHERE id = $2
-		`, attemptCount, id)
 		}
 
 		return
@@ -92,23 +126,44 @@ func ProcessNextDeployment() {
 	if err != nil {
 		log.Println("Upload failed:", err)
 
-		_, err = db.DB.Exec(`
+		result, err = db.DB.Exec(`
 		UPDATE deployments
 		SET status = 'FAILED'
-		WHERE id = $1
+		WHERE id = $1 AND status = 'BUILDING'
 		`, id)
+		if err != nil {
+			log.Println("failed to update status:", err)
+			return
+		}
+		rows, err = result.RowsAffected()
+		if err != nil {
+			log.Println("failed to read affected rows:", err)
+			return
+		}
+		if rows == 0 {
+			log.Println("invalid state transition, skipping:", id)
+		}
 
 		return
 	}
 
-	_, err = db.DB.Exec(`
+	result, err = db.DB.Exec(`
 	UPDATE deployments
 	SET status = 'READY'
-	WHERE id = $1
+	WHERE id = $1 AND status = 'BUILDING'
 	`, id)
 
 	if err != nil {
 		log.Println("failed to update status:", err)
+		return
+	}
+	rows, err = result.RowsAffected()
+	if err != nil {
+		log.Println("failed to read affected rows:", err)
+		return
+	}
+	if rows == 0 {
+		log.Println("invalid state transition, skipping:", id)
 		return
 	}
 
