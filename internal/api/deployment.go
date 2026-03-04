@@ -12,7 +12,7 @@ import (
 type DeploymentResponse struct {
 	ID 			string 			`json:"id"`
 	Status 		string 			`json:"status"`
-	AttempCount string 			`json:"attemp_count"`
+	AttempCount string 			`json:"attempt_count"`
 	MaxAttempts string 			`json:"max_attempts"`
 	CreatedAt 	string   		`json:"created_at"`
 	URL 		string 			`json:"url"`
