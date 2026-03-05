@@ -6,6 +6,7 @@ import (
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/logs"
 	"github.com/cotishq/shipyard/internal/storage"
+	"github.com/cotishq/shipyard/internal/utils"
 )
 
 func ProcessNextDeployment() {
@@ -122,6 +123,11 @@ func ProcessNextDeployment() {
 
 	logs.AddLog(id, "Build successful")
 
+	checksum, err := utils.CalculateChecksum("/tmp/" + id + "/repo/index.html")
+	if err != nil {
+		log.Println("checksum error:", err)
+	}
+
 	err = storage.UploadFolder(id)
 	if err != nil {
 		log.Println("Upload failed:", err)
@@ -145,6 +151,15 @@ func ProcessNextDeployment() {
 		}
 
 		return
+	}
+
+	_, err = db.DB.Exec(`
+	UPDATE deployments
+	SET artifact_checksum = $1
+	WHERE id = $2
+	`, checksum, id)
+	if err != nil {
+		log.Println("failed to store checksum:", err)
 	}
 
 	result, err = db.DB.Exec(`
