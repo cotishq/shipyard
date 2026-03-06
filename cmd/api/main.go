@@ -22,6 +22,10 @@ func main() {
 		return c.String(http.StatusOK, "shipyard running")
 	})
 
+	e.GET("/healthz", func(c *echo.Context) error {
+		return c.String(http.StatusOK,"ok")
+	})
+
 	e.GET("/logs/:id", api.GetLogs)
 	e.POST("/deploy", api.CreateDeployment(db.DB))
 	e.GET("/deployments/:id", api.GetDeployment)
