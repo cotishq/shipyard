@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  
+  postgres:
+    image: postgres:15
+    container_name: shipyard-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shipyard
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio
+    container_name: shipyard-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  api:
+    build: .
+    container_name: shipyard-api 
+    command: ./api
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - minio
+
+  worker:
+    build: .
+    container_name: shipyard-worker
+    command: ./worker
+    depends_on:
+      - postgres
+      - minio
+
+  nginx:
+    image: nginx
+    container_name: shipyard-nginx
+    ports:
+      - "8001:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      
