@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -12,18 +13,23 @@ import (
 var DB *sql.DB
 
 func Init() {
-	connStr := "postgres://postgres:postgres@localhost:5432/shipyard?sslmode=disable"
-
 	var err error
-	DB, err = sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal("Failed to connect to DB:", err)
+
+	dsn := "postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable"
+
+	for i := 0; i < 10; i++ {
+		DB, err = sql.Open("postgres", dsn)
+		if err == nil {
+			err = DB.Ping()
+			if err == nil {
+				log.Println("Connected to PostgreSQL")
+				return
+			}
+		}
+
+		log.Println("Waiting for database...")
+		time.Sleep(2 * time.Second)
 	}
 
-	err = DB.Ping()
-	if err != nil {
-		log.Fatal("DB not reachable:", err)
-	}
-
-	log.Println("Connected to PostgreSQL")
+	log.Fatal("DB not reachable:", err)
 }

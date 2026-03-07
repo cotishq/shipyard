@@ -2,6 +2,7 @@ package executor
 
 import (
 	"log"
+	"os"
 
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/logs"
@@ -55,6 +56,8 @@ func ProcessNextDeployment() {
 	if err != nil {
 		log.Println("Build failed:", err)
 		logs.AddLog(id, "Build failed: "+err.Error())
+		workspace := "/tmp/" + id
+		os.RemoveAll(workspace)
 
 		var attemptCount, maxAttempts int
 
@@ -184,4 +187,12 @@ func ProcessNextDeployment() {
 
 	logs.AddLog(id, "Deployment ready")
 	log.Println("Deployment ready:", id)
+
+	workspace := "/tmp/" + id
+	err = os.RemoveAll(workspace)
+	if err != nil {
+		log.Println("failed to cleanup workspace:", err)
+	} else {
+		log.Println("workspace cleaned:", workspace)
+	}
 }
