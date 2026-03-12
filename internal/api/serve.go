@@ -20,7 +20,7 @@ func ServeDeployment(c *echo.Context) error {
 
 	object, err := storage.Client.GetObject(
 		c.Request().Context(),
-		"deployments",
+		storage.BucketName(),
 		objectName,
 		storage.GetOptions(),
 	)

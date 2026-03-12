@@ -50,6 +50,8 @@ This starts:
 - `worker`
 - `nginx` on `localhost:8001`
 
+API key for protected endpoints (default in compose): `dev-shipyard-key`
+
 ## Database Setup (required)
 
 Run this once after containers are up:
@@ -89,6 +91,7 @@ curl http://localhost:8082/healthz
 
 ```bash
 curl -X POST http://localhost:8082/deploy \
+  -H "X-API-Key: dev-shipyard-key" \
   -H "Content-Type: application/json" \
   -d '{
     "repo_url":"https://github.com/<owner>/<repo>",
@@ -103,12 +106,16 @@ Response includes `deployment_id`.
 
 ```bash
 curl http://localhost:8082/deployments/<deployment_id>
+# add auth header:
+# -H "X-API-Key: dev-shipyard-key"
 ```
 
 ### Get Deployment Logs
 
 ```bash
 curl http://localhost:8082/logs/<deployment_id>
+# add auth header:
+# -H "X-API-Key: dev-shipyard-key"
 ```
 
 ### Serve Deployment
@@ -129,10 +136,14 @@ Artifacts are stored in bucket `deployments`.
 
 ## Important Notes
 
-1. `nginx.conf` currently proxies to `http://172.17.0.1:8080`, but API listens on `8082`.
+1. `POST /deploy`, `GET /deployments/:id`, and `GET /logs/:id` now require an API key:
+   - Header `X-API-Key: <key>` or `Authorization: Bearer <key>`
+   - Set via env var `SHIPYARD_API_KEY`
+
+2. `nginx.conf` currently proxies to `http://172.17.0.1:8080`, but API listens on `8082`.
 Change proxy target to `http://172.17.0.1:8082` (or service DNS `http://api:8082`) for correct routing.
 
-2. Worker runs `docker run` internally for builds. If worker is containerized, ensure it can access Docker:
+3. Worker runs `docker run` internally for builds. If worker is containerized, ensure it can access Docker:
    - mount Docker socket: `/var/run/docker.sock:/var/run/docker.sock`
    - have Docker CLI available in worker image
 

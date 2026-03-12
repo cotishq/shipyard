@@ -27,6 +27,14 @@ services:
     build: .
     container_name: shipyard-api 
     command: ./api
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: deployments
+      SHIPYARD_API_KEY: dev-shipyard-key
+      SHIPYARD_RATE_LIMIT_PER_MINUTE: 60
     ports:
       - "8082:8082"
     depends_on:
@@ -37,6 +45,13 @@ services:
     build: .
     container_name: shipyard-worker
     command: ./worker
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: deployments
+      BUILDER_IMAGE: node:20
     depends_on:
       - postgres
       - minio

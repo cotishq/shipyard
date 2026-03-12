@@ -4,6 +4,10 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/cotishq/shipyard/internal/api"
 	"github.com/cotishq/shipyard/internal/db"
@@ -23,12 +27,28 @@ func main() {
 	})
 
 	e.GET("/healthz", func(c *echo.Context) error {
-		return c.String(http.StatusOK,"ok")
+		return c.String(http.StatusOK, "ok")
 	})
 
-	e.GET("/logs/:id", api.GetLogs)
-	e.POST("/deploy", api.CreateDeployment(db.DB))
-	e.GET("/deployments/:id", api.GetDeployment)
+	apiKey := strings.TrimSpace(os.Getenv("SHIPYARD_API_KEY"))
+	if apiKey == "" {
+		log.Fatal("SHIPYARD_API_KEY is required")
+	}
+
+	limitPerMinute := 60
+	if raw := strings.TrimSpace(os.Getenv("SHIPYARD_RATE_LIMIT_PER_MINUTE")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limitPerMinute = parsed
+		}
+	}
+
+	secured := e.Group("")
+	secured.Use(api.APIKeyAuthMiddleware(apiKey))
+	secured.Use(api.RateLimitMiddleware(api.NewInMemoryRateLimiter(limitPerMinute, time.Minute)))
+	secured.GET("/logs/:id", api.GetLogs)
+	secured.POST("/deploy", api.CreateDeployment(db.DB))
+	secured.GET("/deployments/:id", api.GetDeployment)
+
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
 
