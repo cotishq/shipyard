@@ -50,14 +50,23 @@ func ProcessNextDeployment() {
 		return
 	}
 
+	// Ensure workspace is cleaned regardless of success/failure/return path.
+	defer func() {
+		if err := cleanupWorkspace(id); err != nil {
+			log.Println("failed to cleanup workspace:", err)
+		}
+	}()
+
+	if err := cleanupWorkspace(id); err != nil {
+		log.Println("failed to cleanup workspace before build:", err)
+	}
+
 	logs.AddLog(id, "Running build...")
 	err = RunBuild(id, repoURL, buildCommand, outputDir)
 
 	if err != nil {
 		log.Println("Build failed:", err)
 		logs.AddLog(id, "Build failed: "+err.Error())
-		workspace := "/tmp/" + id
-		os.RemoveAll(workspace)
 
 		var attemptCount, maxAttempts int
 
@@ -187,12 +196,12 @@ func ProcessNextDeployment() {
 
 	logs.AddLog(id, "Deployment ready")
 	log.Println("Deployment ready:", id)
+}
 
+func cleanupWorkspace(id string) error {
 	workspace := "/tmp/" + id
-	err = os.RemoveAll(workspace)
-	if err != nil {
-		log.Println("failed to cleanup workspace:", err)
-	} else {
-		log.Println("workspace cleaned:", workspace)
+	if err := os.RemoveAll(workspace); err != nil {
+		return err
 	}
+	return nil
 }

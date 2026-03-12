@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,12 @@ func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
 
 	hostDir := "/tmp/" + deploymentID
 
-	err := os.Mkdir(hostDir, os.ModePerm)
+	// Start each attempt with a clean workspace.
+	if err := os.RemoveAll(hostDir); err != nil {
+		return fmt.Errorf("failed to cleanup existing workspace: %w", err)
+	}
+
+	err := os.MkdirAll(hostDir, 0o755)
 	if err != nil {
 		return err
 	}
@@ -66,6 +72,7 @@ fi
 		"--memory", "1024m",
 		"--cpus", "1.0",
 		"--pids-limit", "256",
+		"--user", strconv.Itoa(os.Getuid())+":"+strconv.Itoa(os.Getgid()),
 		"-v", hostDir+":/workspace",
 		"-w", "/workspace",
 		"-e", "REPO_URL="+repoURL,
