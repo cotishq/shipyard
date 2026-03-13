@@ -52,31 +52,15 @@ This starts:
 
 API key for protected endpoints (default in compose): `dev-shipyard-key`
 
-## Database Setup (required)
+## Database Setup
 
-Run this once after containers are up:
+Database migrations are applied automatically on startup by both `api` and `worker`.
+Migration files live in `migrations/` and are tracked in the `schema_migrations` table.
+
+For CI or local verification, starting the app is enough to apply pending migrations:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d shipyard <<'SQL'
-CREATE TABLE IF NOT EXISTS deployments (
-  id UUID PRIMARY KEY,
-  repo_url TEXT NOT NULL,
-  build_command TEXT NOT NULL,
-  output_dir TEXT NOT NULL,
-  status TEXT NOT NULL,
-  attempt_count INT NOT NULL DEFAULT 0,
-  max_attempts INT NOT NULL DEFAULT 3,
-  artifact_checksum TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS deployment_logs (
-  id BIGSERIAL PRIMARY KEY,
-  deployment_id UUID NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
-  message TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-SQL
+docker compose up --build
 ```
 
 ## API Endpoints
@@ -155,6 +139,10 @@ Without this, build jobs may fail inside the worker container.
 # Rebuild and restart
 
 docker compose up --build
+
+# Inspect applied migrations
+
+docker compose exec postgres psql -U postgres -d shipyard -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
 
 # Follow API logs
 

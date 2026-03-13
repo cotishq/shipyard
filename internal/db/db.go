@@ -26,6 +26,9 @@ func Init() {
 			err = DB.Ping()
 			if err == nil {
 				log.Println("Connected to PostgreSQL")
+				if err := RunMigrations(DB); err != nil {
+					log.Fatal("failed to run migrations:", err)
+				}
 				return
 			}
 		}
