@@ -1,7 +1,4 @@
-version: "3.9"
-
 services:
-  
   postgres:
     image: postgres:15
     container_name: shipyard-postgres
@@ -52,6 +49,9 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: deployments
       BUILDER_IMAGE: node:20
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
     depends_on:
       - postgres
       - minio

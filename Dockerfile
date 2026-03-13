@@ -10,4 +10,6 @@ COPY . .
 RUN go build -o api ./cmd/api
 RUN go build -o worker ./cmd/worker
 
+RUN apk add --no-cache docker-cli
+
 CMD [ "./api" ]
