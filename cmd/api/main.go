@@ -47,6 +47,7 @@ func main() {
 	secured.Use(api.RateLimitMiddleware(api.NewInMemoryRateLimiter(limitPerMinute, time.Minute)))
 	secured.GET("/logs/:id", api.GetLogs)
 	secured.POST("/deploy", api.CreateDeployment(db.DB))
+	secured.GET("/deployments", api.GetDeployments)
 	secured.GET("/deployments/:id", api.GetDeployment)
 
 	e.GET("/:id", api.ServeDeployment)

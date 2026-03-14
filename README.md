@@ -94,6 +94,13 @@ curl http://localhost:8082/deployments/<deployment_id>
 # -H "X-API-Key: dev-shipyard-key"
 ```
 
+### List Deployments
+
+```bash
+curl "http://localhost:8082/deployments?limit=20&offset=0" \
+  -H "X-API-Key: dev-shipyard-key"
+```
+
 ### Get Deployment Logs
 
 ```bash
