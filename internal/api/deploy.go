@@ -16,9 +16,16 @@ var allowedRepoHosts = map[string]struct{}{
 	"github.com": {},
 }
 
+var allowedBuildPresets = map[string]string{
+	"static-copy": "true",
+	"npm": 		   "npm ci && npm run build",
+	"vite":		   "npm ci && npm run build",
+	"next-export": "npm ci && npm run build && npm run export",
+}
+
 type DeployRequest struct {
 	RepoURL      string `json:"repo_url"`
-	BuildCommand string `json:"build_command"`
+	BuildPreset  string `json:"build_preset"`
 	OutputDir    string `json:"output_dir"`
 }
 
@@ -31,7 +38,8 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 				"error": "invalid request",
 			})
 		}
-		if err := validateDeployRequest(req); err != nil {
+		buildCommand, err := validateDeployRequest(req)
+		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": err.Error(),
 			})
@@ -39,10 +47,10 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 
 		id := uuid.New().String()
 
-		_, err := db.Exec(`
+		_, err = db.Exec(`
 		INSERT INTO deployments (id, repo_url, build_command, output_dir, status)
 		VALUES ($1, $2, $3, $4, $5)
-		`, id, req.RepoURL, req.BuildCommand, req.OutputDir, "QUEUED")
+		`, id, req.RepoURL, buildCommand, req.OutputDir, "QUEUED")
 
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -56,52 +64,58 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 	}
 }
 
-func validateDeployRequest(req *DeployRequest) error {
+func validateDeployRequest(req *DeployRequest) (string, error) {
 	req.RepoURL = strings.TrimSpace(req.RepoURL)
-	req.BuildCommand = strings.TrimSpace(req.BuildCommand)
+	req.BuildPreset= strings.TrimSpace(req.BuildPreset)
 	req.OutputDir = strings.TrimSpace(req.OutputDir)
 
 	if req.RepoURL == "" {
-		return errors.New("repo_url is required")
+		return "", errors.New("repo_url is required")
 	}
 	if strings.ContainsAny(req.RepoURL, " \t\r\n") {
-		return errors.New("repo_url must not contain whitespace")
+		return "", errors.New("repo_url must not contain whitespace")
 	}
 	u, err := url.Parse(req.RepoURL)
 	if err != nil || u.Host == "" {
-		return errors.New("repo_url must be a valid URL")
+		return "", errors.New("repo_url must be a valid URL")
 	}
 	if u.Scheme != "https" {
-		return errors.New("repo_url must use https")
+		return "", errors.New("repo_url must use https")
 	}
 	if err := validateRepoHost(u.Hostname()); err != nil{
-		return err
+		return "", err
 	}
 
-	if req.BuildCommand == "" {
-		return errors.New("build_command is required")
+	if req.BuildPreset == "" {
+		return "", errors.New("build_preset is required")
 	}
-	if len(req.BuildCommand) > 500 {
-		return errors.New("build_command is too long")
+	
+	buildCommand, ok := allowedBuildPresets[req.BuildPreset]
+	if !ok {
+		return "", errors.New("unsupported build_preset")
+	}
+
+	if req.BuildPreset == "static-copy" && req.OutputDir == "" {
+		return buildCommand, nil
 	}
 
 	if req.OutputDir == "" {
-		return nil
+		return "", errors.New("output_dir is required")
 	}
 
 	cleaned := path.Clean(req.OutputDir)
 	if cleaned == "." {
 		req.OutputDir = ""
-		return nil
+		return buildCommand, nil
 	}
 	if strings.HasPrefix(cleaned, "/") {
-		return errors.New("output_dir must be a relative path")
+		return "", errors.New("output_dir must be a relative path")
 	}
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") || strings.Contains(cleaned, "/../") {
-		return errors.New("output_dir must not escape repository root")
+		return "", errors.New("output_dir must not escape repository root")
 	}
 	req.OutputDir = cleaned
-	return nil
+	return buildCommand, nil
 }
 
 func validateRepoHost(host string) error {
