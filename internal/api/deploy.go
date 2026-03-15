@@ -12,6 +12,10 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
+var allowedRepoHosts = map[string]struct{}{
+	"github.com": {},
+}
+
 type DeployRequest struct {
 	RepoURL      string `json:"repo_url"`
 	BuildCommand string `json:"build_command"`
@@ -70,6 +74,9 @@ func validateDeployRequest(req *DeployRequest) error {
 	if u.Scheme != "https" {
 		return errors.New("repo_url must use https")
 	}
+	if err := validateRepoHost(u.Hostname()); err != nil{
+		return err
+	}
 
 	if req.BuildCommand == "" {
 		return errors.New("build_command is required")
@@ -94,5 +101,13 @@ func validateDeployRequest(req *DeployRequest) error {
 		return errors.New("output_dir must not escape repository root")
 	}
 	req.OutputDir = cleaned
+	return nil
+}
+
+func validateRepoHost(host string) error {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if _, ok := allowedRepoHosts[host]; !ok {
+		return errors.New("repo host is not allowed")
+	}
 	return nil
 }
