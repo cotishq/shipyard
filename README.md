@@ -50,7 +50,7 @@ This starts:
 - `worker`
 - `nginx` on `localhost:8001`
 
-API key for protected endpoints (default in compose): `dev-shipyard-key`
+API key for protected endpoints (from compose example): `shipyard_api_key_change_me_please`
 
 ## Database Setup
 
@@ -75,7 +75,7 @@ curl http://localhost:8082/healthz
 
 ```bash
 curl -X POST http://localhost:8082/deploy \
-  -H "X-API-Key: dev-shipyard-key" \
+  -H "X-API-Key: shipyard_api_key_change_me_please" \
   -H "Content-Type: application/json" \
   -d '{
     "repo_url":"https://github.com/<owner>/<repo>",
@@ -91,14 +91,14 @@ Response includes `deployment_id`.
 ```bash
 curl http://localhost:8082/deployments/<deployment_id>
 # add auth header:
-# -H "X-API-Key: dev-shipyard-key"
+# -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
 ### List Deployments
 
 ```bash
 curl "http://localhost:8082/deployments?limit=20&offset=0" \
-  -H "X-API-Key: dev-shipyard-key"
+  -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
 ### Get Deployment Logs
@@ -106,7 +106,7 @@ curl "http://localhost:8082/deployments?limit=20&offset=0" \
 ```bash
 curl http://localhost:8082/logs/<deployment_id>
 # add auth header:
-# -H "X-API-Key: dev-shipyard-key"
+# -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
 ### Serve Deployment
@@ -120,8 +120,8 @@ curl http://localhost:8082/logs/<deployment_id>
 ## MinIO
 
 - Console: `http://localhost:9001`
-- Username: `minioadmin`
-- Password: `minioadmin`
+- Username: `shipyard_minio`
+- Password: `shipyard_minio_change_me`
 
 Artifacts are stored in bucket `deployments`.
 
@@ -130,9 +130,10 @@ Artifacts are stored in bucket `deployments`.
 1. `POST /deploy`, `GET /deployments/:id`, and `GET /logs/:id` now require an API key:
    - Header `X-API-Key: <key>` or `Authorization: Bearer <key>`
    - Set via env var `SHIPYARD_API_KEY`
+   - Default development key values are blocked unless `SHIPYARD_ALLOW_INSECURE_DEFAULTS=true`
 
-2. `nginx.conf` currently proxies to `http://172.17.0.1:8080`, but API listens on `8082`.
-Change proxy target to `http://172.17.0.1:8082` (or service DNS `http://api:8082`) for correct routing.
+2. `nginx.conf` proxies to `http://api:8082` inside Docker Compose network.
+If you run NGINX outside Compose, adjust upstream accordingly.
 
 3. Worker runs `docker run` internally for builds. If worker is containerized, ensure it can access Docker:
    - mount Docker socket: `/var/run/docker.sock:/var/run/docker.sock`
@@ -149,7 +150,7 @@ docker compose up --build
 
 # Inspect applied migrations
 
-docker compose exec postgres psql -U postgres -d shipyard -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
+docker compose exec postgres psql -U shipyard -d shipyard -c "SELECT * FROM schema_migrations ORDER BY applied_at;"
 
 # Follow API logs
 

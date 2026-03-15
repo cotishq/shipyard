@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/api"
+	"github.com/cotishq/shipyard/internal/config"
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
@@ -31,8 +32,8 @@ func main() {
 	})
 
 	apiKey := strings.TrimSpace(os.Getenv("SHIPYARD_API_KEY"))
-	if apiKey == "" {
-		log.Fatal("SHIPYARD_API_KEY is required")
+	if err := config.ValidateAPIKey(apiKey); err != nil && !config.AllowInsecureDefaults() {
+		log.Fatal(err)
 	}
 
 	limitPerMinute := 60

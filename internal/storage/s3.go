@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cotishq/shipyard/internal/config"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -23,6 +25,12 @@ func Init() {
 	secretKey := getEnv("MINIO_SECRET_KEY", "minioadmin")
 	useSSL := getEnvBool("MINIO_USE_SSL", false)
 	bucketName = getEnv("MINIO_BUCKET", "deployments")
+	maxAttempts := getEnvInt("MINIO_INIT_MAX_ATTEMPTS", 20)
+	retryDelay := time.Duration(getEnvInt("MINIO_INIT_RETRY_DELAY_SECONDS", 2)) * time.Second
+
+	if err := config.ValidateMinIOCredentials(accessKey, secretKey); err != nil && !config.AllowInsecureDefaults() {
+		log.Fatalln(err)
+	}
 
 	Client, err = minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
@@ -32,11 +40,24 @@ func Init() {
 	if err != nil {
 		log.Fatalln("failed to connect to MinIO:", err)
 	}
-	if err := ensureBucket(context.Background(), bucketName); err != nil {
-		log.Fatalln("failed to ensure MinIO bucket:", err)
+
+	var lastErr error
+	for i := 1; i <= maxAttempts; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		lastErr = ensureBucket(ctx, bucketName)
+		cancel()
+		if lastErr == nil {
+			log.Println("connected to minio")
+			return
+		}
+
+		log.Printf("waiting for MinIO (%d/%d): %v", i, maxAttempts, lastErr)
+		if i < maxAttempts {
+			time.Sleep(retryDelay)
+		}
 	}
 
-	log.Println("connected to minio")
+	log.Fatalln("failed to ensure MinIO bucket:", lastErr)
 }
 
 func UploadFolder(deploymentID string) error {
@@ -100,4 +121,16 @@ func getEnvBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return value
+}
+
+func getEnvInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }

@@ -3,8 +3,8 @@ services:
     image: postgres:15
     container_name: shipyard-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: shipyard
+      POSTGRES_PASSWORD: shipyard_db_change_me
       POSTGRES_DB: shipyard
     ports:
       - "5432:5432"
@@ -14,8 +14,8 @@ services:
     container_name: shipyard-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: shipyard_minio
+      MINIO_ROOT_PASSWORD: shipyard_minio_change_me
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -25,12 +25,12 @@ services:
     container_name: shipyard-api 
     command: ./api
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable
+      DATABASE_URL: postgres://shipyard:shipyard_db_change_me@postgres:5432/shipyard?sslmode=disable
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: shipyard_minio
+      MINIO_SECRET_KEY: shipyard_minio_change_me
       MINIO_BUCKET: deployments
-      SHIPYARD_API_KEY: dev-shipyard-key
+      SHIPYARD_API_KEY: shipyard_api_key_change_me_please
       SHIPYARD_RATE_LIMIT_PER_MINUTE: 60
     ports:
       - "8082:8082"
@@ -43,10 +43,10 @@ services:
     container_name: shipyard-worker
     command: ./worker
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable
+      DATABASE_URL: postgres://shipyard:shipyard_db_change_me@postgres:5432/shipyard?sslmode=disable
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: shipyard_minio
+      MINIO_SECRET_KEY: shipyard_minio_change_me
       MINIO_BUCKET: deployments
       BUILDER_IMAGE: node:20
     volumes:

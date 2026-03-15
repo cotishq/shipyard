@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cotishq/shipyard/internal/config"
 	_ "github.com/lib/pq"
 )
 
@@ -17,7 +18,10 @@ func Init() {
 
 	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@postgres:5432/shipyard?sslmode=disable"
+		dsn = config.DefaultDatabaseURL
+	}
+	if err := config.ValidateDatabaseURL(dsn); err != nil && !config.AllowInsecureDefaults() {
+		log.Fatal(err)
 	}
 
 	for i := 0; i < 10; i++ {
