@@ -2,27 +2,40 @@ services:
   postgres:
     image: postgres:15
     container_name: shipyard-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: shipyard
       POSTGRES_PASSWORD: shipyard_db_change_me
       POSTGRES_DB: shipyard
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shipyard -d shipyard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
 
   minio:
     image: minio/minio
     container_name: shipyard-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: shipyard_minio
       MINIO_ROOT_PASSWORD: shipyard_minio_change_me
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "9000:9000"
       - "9001:9001"
 
   api:
     build: .
-    container_name: shipyard-api 
+    container_name: shipyard-api
+    restart: unless-stopped
     command: ./api
     environment:
       DATABASE_URL: postgres://shipyard:shipyard_db_change_me@postgres:5432/shipyard?sslmode=disable
@@ -35,12 +48,15 @@ services:
     ports:
       - "8082:8082"
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   worker:
     build: .
     container_name: shipyard-worker
+    restart: unless-stopped
     command: ./worker
     environment:
       DATABASE_URL: postgres://shipyard:shipyard_db_change_me@postgres:5432/shipyard?sslmode=disable
@@ -58,12 +74,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   nginx:
     image: nginx
     container_name: shipyard-nginx
+    restart: unless-stopped
     ports:
       - "8001:80"
     volumes:

@@ -42,7 +42,10 @@ func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	buildTimeoutMinutes := getEnvInt("MAX_BUILD_TIME_MINUTES", 10)
+	maxRepoSizeMB := getEnvInt("MAX_REPO_SIZE_MB", 200)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(buildTimeoutMinutes)*time.Minute)
 	defer cancel()
 
 	builderImage := strings.TrimSpace(os.Getenv("BUILDER_IMAGE"))
@@ -54,6 +57,12 @@ func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
 set -eu
 
 git clone --depth 1 "$REPO_URL" repo
+REPO_SIZE_MB=$(du -sm repo | cut -f1)
+if [ "$REPO_SIZE_MB" -gt "$MAX_REPO_SIZE_MB" ]; then
+	echo "repository exceeds max size: ${REPO_SIZE_MB}MB > ${MAX_REPO_SIZE_MB}MB" >&2
+	exit 1
+fi
+
 cd repo
 sh -lc "$BUILD_COMMAND"
 
@@ -78,20 +87,21 @@ fi
 		"-e", "REPO_URL="+repoURL,
 		"-e", "BUILD_COMMAND="+buildCommand,
 		"-e", "OUTPUT_DIR="+outputDir,
+		"-e", "MAX_REPO_SIZE_MB="+strconv.Itoa(maxRepoSizeMB),
 		builderImage,
 		"sh", "-c", script,
 	)
 
 	output, err := cmd.CombinedOutput()
 
-    outputText := truncateBuildOutput(string(output))
-	log.Println("Docker output:\n", string(output))
+	outputText := truncateBuildOutput(string(output))
+	log.Println("Docker output:\n", outputText)
 	logs.AddLog(deploymentID, outputText)
-	
+
 	if ctx.Err() == context.DeadlineExceeded {
 		log.Println("Build timed out")
 		logs.AddLog(deploymentID, "Build timed out")
-		return fmt.Errorf("build timed out")
+		return fmt.Errorf("build timed out after %d minutes", buildTimeoutMinutes)
 	}
 	if errors.Is(err, exec.ErrNotFound) {
 		return fmt.Errorf("docker CLI not found in worker runtime")
