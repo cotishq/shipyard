@@ -84,7 +84,10 @@ fi
 
 	output, err := cmd.CombinedOutput()
 
+    outputText := truncateBuildOutput(string(output))
 	log.Println("Docker output:\n", string(output))
+	logs.AddLog(deploymentID, outputText)
+	
 	if ctx.Err() == context.DeadlineExceeded {
 		log.Println("Build timed out")
 		logs.AddLog(deploymentID, "Build timed out")
@@ -101,4 +104,40 @@ fi
 
 	log.Println("Build successful")
 	return nil
+}
+
+func truncateBuildOutput(output string) string {
+	maxLen := getEnvInt("MAX_LOG_SIZE_BYTES", 8192)
+	if maxLen <= 0 {
+		return ""
+	}
+	if len(output) <= maxLen {
+		return output
+	}
+
+	suffix := "\n...[build output truncated]"
+	if maxLen <= len(suffix) {
+		return suffix[:maxLen]
+	}
+
+	cutoff := maxLen - len(suffix)
+	if cutoff < 0 {
+		cutoff = 0
+	}
+
+	return output[:cutoff] + suffix
+}
+
+func getEnvInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+
+	return value
 }

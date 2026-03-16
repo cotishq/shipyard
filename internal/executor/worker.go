@@ -13,9 +13,27 @@ import (
 func ProcessNextDeployment() {
 	log.Println("checking for deployments")
 
+	maxConcurrentBuilds := getEnvInt("MAX_CONCURRENT_BUILDS", 1)
+
+	var currentlyBuilding int
+	err := db.DB.QueryRow(`
+	  SELECT COUNT(*)
+	  FROM deployments
+	  WHERE status = 'BUILDING'
+	  `).Scan(&currentlyBuilding)
+	  if err != nil {
+		log.Println("failed to count active builds:", err)
+		return
+	  }
+
+	  if currentlyBuilding >= maxConcurrentBuilds {
+		log.Println("max concurrent builds reached")
+		return
+	  }
+
 	var id, repoURL, buildCommand, outputDir string
 
-	err := db.DB.QueryRow(`
+	err = db.DB.QueryRow(`
 	SELECT id, repo_url, build_command, output_dir
 	FROM deployments
 	WHERE status = 'QUEUED'

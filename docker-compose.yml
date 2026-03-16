@@ -49,6 +49,11 @@ services:
       MINIO_SECRET_KEY: shipyard_minio_change_me
       MINIO_BUCKET: deployments
       BUILDER_IMAGE: node:20
+      MAX_REPO_SIZE_MB: 200
+      MAX_BUILD_TIME_MINUTES: 10
+      MAX_CONCURRENT_BUILDS: 1
+      MAX_LOG_SIZE_BYTES: 8192
+
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
