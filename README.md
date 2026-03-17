@@ -1,7 +1,7 @@
 # Shipyard
 
 Shipyard is an MVP deployment orchestration platform for static sites.
-It accepts a Git repository + build config, runs a containerized build, uploads artifacts to MinIO (S3-compatible), and serves deployments by ID.
+It accepts a Git repository + build preset, runs a containerized build, uploads artifacts to MinIO (S3-compatible), and serves deployments by ID.
 
 ## Features
 
@@ -79,12 +79,31 @@ curl -X POST http://localhost:8082/deploy \
   -H "Content-Type: application/json" \
   -d '{
     "repo_url":"https://github.com/<owner>/<repo>",
-    "build_command":"npm install && npm run build",
+    "build_preset":"vite",
     "output_dir":"dist"
   }'
 ```
 
 Response includes `deployment_id`.
+
+#### Request fields
+
+- **`repo_url`**: required. Must be a valid `https` URL. Whitespace is rejected.
+- **`build_preset`**: required. One of the supported presets listed below.
+- **`output_dir`**: required for most presets. Must be a relative path inside the repo (no leading `/`, no `..` traversal). If omitted for `static-copy`, the entire repo working directory is copied to the artifact workspace.
+
+#### Supported `build_preset` values
+
+- **`static-copy`**: copies files without building (useful for already-built/static repos)
+- **`npm`**: runs `npm ci && npm run build`
+- **`vite`**: runs `npm ci && npm run build`
+- **`next-export`**: runs `npm ci && npm run build && npm run export`
+
+#### Repo host allowlist
+
+For safety, Shipyard currently only allows cloning from:
+
+- `github.com`
 
 ### Get Deployment Status
 
