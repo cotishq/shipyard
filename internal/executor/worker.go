@@ -21,15 +21,15 @@ func ProcessNextDeployment() {
 	  FROM deployments
 	  WHERE status = 'BUILDING'
 	  `).Scan(&currentlyBuilding)
-	  if err != nil {
+	if err != nil {
 		log.Println("failed to count active builds:", err)
 		return
-	  }
+	}
 
-	  if currentlyBuilding >= maxConcurrentBuilds {
+	if currentlyBuilding >= maxConcurrentBuilds {
 		log.Println("max concurrent builds reached")
 		return
-	  }
+	}
 
 	var id, repoURL, buildCommand, outputDir string
 
@@ -153,7 +153,7 @@ func ProcessNextDeployment() {
 
 	logs.AddLog(id, "Build successful")
 
-	checksum, err := utils.CalculateChecksum("/tmp/" + id + "/repo/index.html")
+	checksum, err := utils.CalculateChecksum("/tmp/" + id)
 	if err != nil {
 		log.Println("checksum error:", err)
 	}

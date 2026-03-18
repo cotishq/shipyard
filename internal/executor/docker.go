@@ -56,14 +56,17 @@ func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
 	script := `
 set -eu
 
-git clone --depth 1 "$REPO_URL" repo
-REPO_SIZE_MB=$(du -sm repo | cut -f1)
+SRC_DIR=$(mktemp -d)
+trap 'rm -rf "$SRC_DIR"' EXIT
+
+git clone --depth 1 "$REPO_URL" "$SRC_DIR/repo"
+REPO_SIZE_MB=$(du -sm "$SRC_DIR/repo" | cut -f1)
 if [ "$REPO_SIZE_MB" -gt "$MAX_REPO_SIZE_MB" ]; then
 	echo "repository exceeds max size: ${REPO_SIZE_MB}MB > ${MAX_REPO_SIZE_MB}MB" >&2
 	exit 1
 fi
 
-cd repo
+cd "$SRC_DIR/repo"
 sh -lc "$BUILD_COMMAND"
 
 if [ -z "$OUTPUT_DIR" ]; then
