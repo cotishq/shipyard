@@ -12,30 +12,34 @@ import (
 )
 
 type DeploymentResponse struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	AttempCount string `json:"attempt_count"`
-	MaxAttempts string `json:"max_attempts"`
-	CreatedAt   string `json:"created_at"`
-	URL         string `json:"url"`
+	ID                   string  `json:"id"`
+	Status               string  `json:"status"`
+	AttempCount          string  `json:"attempt_count"`
+	MaxAttempts          string  `json:"max_attempts"`
+	CreatedAt            string  `json:"created_at"`
+	StartedAt            *string `json:"started_at,omitempty"`
+	FinishedAt           *string `json:"finished_at,omitempty"`
+	ErrorMessage         *string `json:"error_message,omitempty"`
+	BuildDurationSeconds *int    `json:"build_duration_seconds,omitempty"`
+	URL                  string  `json:"url"`
 }
 
 func GetDeployment(c *echo.Context) error {
 	id := c.Param("id")
 
 	var resp DeploymentResponse
+	var (
+		startedAt            sql.NullTime
+		finishedAt           sql.NullTime
+		errorMessage         sql.NullString
+		buildDurationSeconds sql.NullInt64
+	)
 
 	err := db.DB.QueryRow(`
-	    SELECT id, status, attempt_count, max_attempts, created_at
+	    SELECT id, status, attempt_count, max_attempts, created_at, started_at, finished_at, error_message, build_duration_seconds
 		FROM deployments
 		WHERE id = $1
-		`, id).Scan(
-		&resp.ID,
-		&resp.Status,
-		&resp.AttempCount,
-		&resp.MaxAttempts,
-		&resp.CreatedAt,
-	)
+		`, id).Scan(&resp.ID, &resp.Status, &resp.AttempCount, &resp.MaxAttempts, &resp.CreatedAt, &startedAt, &finishedAt, &errorMessage, &buildDurationSeconds)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -48,6 +52,10 @@ func GetDeployment(c *echo.Context) error {
 		})
 	}
 
+	resp.StartedAt = nullTimeToStringPtr(startedAt)
+	resp.FinishedAt = nullTimeToStringPtr(finishedAt)
+	resp.ErrorMessage = nullStringToPtr(errorMessage)
+	resp.BuildDurationSeconds = nullInt64ToIntPtr(buildDurationSeconds)
 	resp.URL = "http://localhost:8001/" + resp.ID
 
 	return c.JSON(http.StatusOK, resp)
@@ -78,7 +86,7 @@ func GetDeployments(c *echo.Context) error {
 	}
 
 	rows, err := db.DB.Query(`
-		SELECT id, status, attempt_count, max_attempts, created_at
+		SELECT id, status, attempt_count, max_attempts, created_at, started_at, finished_at, error_message, build_duration_seconds
 		FROM deployments
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -98,21 +106,29 @@ func GetDeployments(c *echo.Context) error {
 			attemptCount int
 			maxAttempts  int
 			createdAt    time.Time
+			startedAt    sql.NullTime
+			finishedAt   sql.NullTime
+			errorMessage sql.NullString
+			buildSeconds sql.NullInt64
 		)
 
-		if err := rows.Scan(&id, &status, &attemptCount, &maxAttempts, &createdAt); err != nil {
+		if err := rows.Scan(&id, &status, &attemptCount, &maxAttempts, &createdAt, &startedAt, &finishedAt, &errorMessage, &buildSeconds); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to scan deployment row",
 			})
 		}
 
 		deployments = append(deployments, DeploymentResponse{
-			ID:          id,
-			Status:      status,
-			AttempCount: fmt.Sprintf("%d", attemptCount),
-			MaxAttempts: fmt.Sprintf("%d", maxAttempts),
-			CreatedAt:   createdAt.Format(time.RFC3339),
-			URL:         "http://localhost:8001/" + id,
+			ID:                   id,
+			Status:               status,
+			AttempCount:          fmt.Sprintf("%d", attemptCount),
+			MaxAttempts:          fmt.Sprintf("%d", maxAttempts),
+			CreatedAt:            createdAt.Format(time.RFC3339),
+			StartedAt:            nullTimeToStringPtr(startedAt),
+			FinishedAt:           nullTimeToStringPtr(finishedAt),
+			ErrorMessage:         nullStringToPtr(errorMessage),
+			BuildDurationSeconds: nullInt64ToIntPtr(buildSeconds),
+			URL:                  "http://localhost:8001/" + id,
 		})
 	}
 
@@ -123,4 +139,28 @@ func GetDeployments(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, deployments)
+}
+
+func nullTimeToStringPtr(value sql.NullTime) *string {
+	if !value.Valid {
+		return nil
+	}
+	formatted := value.Time.Format(time.RFC3339)
+	return &formatted
+}
+
+func nullStringToPtr(value sql.NullString) *string {
+	if !value.Valid {
+		return nil
+	}
+	trimmed := value.String
+	return &trimmed
+}
+
+func nullInt64ToIntPtr(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	converted := int(value.Int64)
+	return &converted
 }

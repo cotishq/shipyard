@@ -113,6 +113,12 @@ curl http://localhost:8082/deployments/<deployment_id>
 # -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
+Response now includes lifecycle metadata:
+- `started_at`
+- `finished_at`
+- `error_message`
+- `build_duration_seconds`
+
 ### List Deployments
 
 ```bash

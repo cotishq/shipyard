@@ -50,7 +50,11 @@ func ProcessNextDeployment() {
 
 	result, err := db.DB.Exec(`
 	UPDATE deployments
-	SET status = 'BUILDING'
+	SET status = 'BUILDING',
+	    started_at = NOW(),
+	    finished_at = NULL,
+	    error_message = NULL,
+	    build_duration_seconds = NULL
 	WHERE id = $1 AND status = 'QUEUED'
 	`, id)
 
@@ -102,11 +106,14 @@ func ProcessNextDeployment() {
 		attemptCount++
 
 		result, err = db.DB.Exec(`
-			UPDATE deployments
-			SET attempt_count = $1,
-			    status = 'FAILED'
-			WHERE id = $2 AND status = 'BUILDING'
-		`, attemptCount, id)
+				UPDATE deployments
+				SET attempt_count = $1,
+				    status = 'FAILED',
+				    error_message = $2,
+				    finished_at = NOW(),
+				    build_duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW())))::INT)
+				WHERE id = $3 AND status = 'BUILDING'
+			`, attemptCount, err.Error(), id)
 		if err != nil {
 			log.Println("failed to update failed status:", err)
 			return
@@ -164,9 +171,12 @@ func ProcessNextDeployment() {
 
 		result, err = db.DB.Exec(`
 		UPDATE deployments
-		SET status = 'FAILED'
+		SET status = 'FAILED',
+		    error_message = $2,
+		    finished_at = NOW(),
+		    build_duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW())))::INT)
 		WHERE id = $1 AND status = 'BUILDING'
-		`, id)
+		`, id, err.Error())
 		if err != nil {
 			log.Println("failed to update status:", err)
 			return
@@ -194,7 +204,10 @@ func ProcessNextDeployment() {
 
 	result, err = db.DB.Exec(`
 	UPDATE deployments
-	SET status = 'READY'
+	SET status = 'READY',
+	    error_message = NULL,
+	    finished_at = NOW(),
+	    build_duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(started_at, NOW())))::INT)
 	WHERE id = $1 AND status = 'BUILDING'
 	`, id)
 
