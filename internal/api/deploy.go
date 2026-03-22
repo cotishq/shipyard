@@ -18,15 +18,15 @@ var allowedRepoHosts = map[string]struct{}{
 
 var allowedBuildPresets = map[string]string{
 	"static-copy": "true",
-	"npm": 		   "npm ci && npm run build",
-	"vite":		   "npm ci && npm run build",
+	"npm":         "npm ci && npm run build",
+	"vite":        "npm ci && npm run build",
 	"next-export": "npm ci && npm run build && npm run export",
 }
 
 type DeployRequest struct {
-	RepoURL      string `json:"repo_url"`
-	BuildPreset  string `json:"build_preset"`
-	OutputDir    string `json:"output_dir"`
+	RepoURL     string `json:"repo_url"`
+	BuildPreset string `json:"build_preset"`
+	OutputDir   string `json:"output_dir"`
 }
 
 func CreateDeployment(db *sql.DB) echo.HandlerFunc {
@@ -66,7 +66,7 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 
 func validateDeployRequest(req *DeployRequest) (string, error) {
 	req.RepoURL = strings.TrimSpace(req.RepoURL)
-	req.BuildPreset= strings.TrimSpace(req.BuildPreset)
+	req.BuildPreset = strings.TrimSpace(req.BuildPreset)
 	req.OutputDir = strings.TrimSpace(req.OutputDir)
 
 	if req.RepoURL == "" {
@@ -82,14 +82,14 @@ func validateDeployRequest(req *DeployRequest) (string, error) {
 	if u.Scheme != "https" {
 		return "", errors.New("repo_url must use https")
 	}
-	if err := validateRepoHost(u.Hostname()); err != nil{
+	if err := validateRepoHost(u.Hostname()); err != nil {
 		return "", err
 	}
 
 	if req.BuildPreset == "" {
 		return "", errors.New("build_preset is required")
 	}
-	
+
 	buildCommand, ok := allowedBuildPresets[req.BuildPreset]
 	if !ok {
 		return "", errors.New("unsupported build_preset")
