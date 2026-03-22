@@ -3,11 +3,11 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/cotishq/shipyard/internal/observability"
 	projectmigrations "github.com/cotishq/shipyard/migrations"
 )
 
@@ -19,7 +19,9 @@ func RunMigrations(db *sql.DB) error {
 	}
 	defer func() {
 		if err := releaseMigrationLock(db); err != nil {
-			log.Println("failed to release migration lock:", err)
+			observability.Error("failed to release migration lock", map[string]any{
+				"error": err.Error(),
+			})
 		}
 	}()
 
@@ -59,7 +61,9 @@ func RunMigrations(db *sql.DB) error {
 			return err
 		}
 
-		log.Println("applied migration:", name)
+		observability.Info("applied migration", map[string]any{
+			"migration": name,
+		})
 	}
 
 	return nil

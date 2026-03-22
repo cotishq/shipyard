@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -12,10 +11,14 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/logs"
+	"github.com/cotishq/shipyard/internal/observability"
 )
 
 func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
-	log.Println("Starting Docker build...")
+	observability.Info("starting docker build", map[string]any{
+		"deployment_id": deploymentID,
+		"output_dir":    outputDir,
+	})
 
 	repoURL = strings.TrimSpace(repoURL)
 	buildCommand = strings.TrimSpace(buildCommand)
@@ -98,11 +101,17 @@ fi
 	output, err := cmd.CombinedOutput()
 
 	outputText := truncateBuildOutput(string(output))
-	log.Println("Docker output:\n", outputText)
+	observability.Info("docker build output", map[string]any{
+		"deployment_id": deploymentID,
+		"output":        outputText,
+	})
 	logs.AddLog(deploymentID, outputText)
 
 	if ctx.Err() == context.DeadlineExceeded {
-		log.Println("Build timed out")
+		observability.Error("build timed out", map[string]any{
+			"deployment_id":         deploymentID,
+			"build_timeout_minutes": buildTimeoutMinutes,
+		})
 		logs.AddLog(deploymentID, "Build timed out")
 		return fmt.Errorf("build timed out after %d minutes", buildTimeoutMinutes)
 	}
@@ -111,11 +120,16 @@ fi
 	}
 
 	if err != nil {
-		log.Println("Build failed:", err)
+		observability.Error("build failed", map[string]any{
+			"deployment_id": deploymentID,
+			"error":         err.Error(),
+		})
 		return err
 	}
 
-	log.Println("Build successful")
+	observability.Info("build successful", map[string]any{
+		"deployment_id": deploymentID,
+	})
 	return nil
 }
 

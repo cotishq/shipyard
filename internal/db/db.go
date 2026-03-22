@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/config"
+	"github.com/cotishq/shipyard/internal/observability"
 	_ "github.com/lib/pq"
 )
 
@@ -29,7 +31,7 @@ func Init() {
 		if err == nil {
 			err = DB.Ping()
 			if err == nil {
-				log.Println("Connected to PostgreSQL")
+				observability.Info("connected to PostgreSQL", nil)
 				if err := RunMigrations(DB); err != nil {
 					log.Fatal("failed to run migrations:", err)
 				}
@@ -37,9 +39,18 @@ func Init() {
 			}
 		}
 
-		log.Println("Waiting for database...")
+		observability.Info("waiting for database", map[string]any{
+			"attempt": i + 1,
+		})
 		time.Sleep(2 * time.Second)
 	}
 
 	log.Fatal("DB not reachable:", err)
+}
+
+func HealthCheck(ctx context.Context) error {
+	if DB == nil {
+		return sql.ErrConnDone
+	}
+	return DB.PingContext(ctx)
 }

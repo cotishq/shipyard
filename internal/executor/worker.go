@@ -1,17 +1,17 @@
 package executor
 
 import (
-	"log"
 	"os"
 
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/logs"
+	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/cotishq/shipyard/internal/utils"
 )
 
 func ProcessNextDeployment() {
-	log.Println("checking for deployments")
+	observability.Info("checking for deployments", nil)
 
 	maxConcurrentBuilds := getEnvInt("MAX_CONCURRENT_BUILDS", 1)
 
@@ -20,14 +20,19 @@ func ProcessNextDeployment() {
 	  SELECT COUNT(*)
 	  FROM deployments
 	  WHERE status = 'BUILDING'
-	  `).Scan(&currentlyBuilding)
+	`).Scan(&currentlyBuilding)
 	if err != nil {
-		log.Println("failed to count active builds:", err)
+		observability.Error("failed to count active builds", map[string]any{
+			"error": err.Error(),
+		})
 		return
 	}
 
 	if currentlyBuilding >= maxConcurrentBuilds {
-		log.Println("max concurrent builds reached")
+		observability.Info("max concurrent builds reached", map[string]any{
+			"active_builds":         currentlyBuilding,
+			"max_concurrent_builds": maxConcurrentBuilds,
+		})
 		return
 	}
 
@@ -45,7 +50,9 @@ func ProcessNextDeployment() {
 		return
 	}
 
-	log.Println("Processing deployment:", id)
+	observability.Info("processing deployment", map[string]any{
+		"deployment_id": id,
+	})
 	logs.AddLog(id, "Starting deployment")
 
 	result, err := db.DB.Exec(`
@@ -59,35 +66,52 @@ func ProcessNextDeployment() {
 	`, id)
 
 	if err != nil {
-		log.Println("failed to update status:", err)
+		observability.Error("failed to update deployment status to BUILDING", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 		return
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		log.Println("failed to read affected rows:", err)
+		observability.Error("failed to read affected rows", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 		return
 	}
 	if rows == 0 {
-		log.Println("invalid state transition, skipping:", id)
+		observability.Info("invalid state transition to BUILDING", map[string]any{
+			"deployment_id": id,
+		})
 		return
 	}
 
 	// Ensure workspace is cleaned regardless of success/failure/return path.
 	defer func() {
 		if err := cleanupWorkspace(id); err != nil {
-			log.Println("failed to cleanup workspace:", err)
+			observability.Error("failed to cleanup workspace", map[string]any{
+				"deployment_id": id,
+				"error":         err.Error(),
+			})
 		}
 	}()
 
 	if err := cleanupWorkspace(id); err != nil {
-		log.Println("failed to cleanup workspace before build:", err)
+		observability.Error("failed to cleanup workspace before build", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 	}
 
 	logs.AddLog(id, "Running build...")
 	err = RunBuild(id, repoURL, buildCommand, outputDir)
 
 	if err != nil {
-		log.Println("Build failed:", err)
+		observability.Error("deployment build failed", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 		logs.AddLog(id, "Build failed: "+err.Error())
 
 		var attemptCount, maxAttempts int
@@ -99,7 +123,10 @@ func ProcessNextDeployment() {
 	`, id).Scan(&attemptCount, &maxAttempts)
 
 		if err2 != nil {
-			log.Println("failed to fetch attempts:", err2)
+			observability.Error("failed to fetch deployment attempts", map[string]any{
+				"deployment_id": id,
+				"error":         err2.Error(),
+			})
 			return
 		}
 
@@ -115,21 +142,33 @@ func ProcessNextDeployment() {
 				WHERE id = $3 AND status = 'BUILDING'
 			`, attemptCount, err.Error(), id)
 		if err != nil {
-			log.Println("failed to update failed status:", err)
+			observability.Error("failed to update deployment to FAILED", map[string]any{
+				"deployment_id": id,
+				"error":         err.Error(),
+			})
 			return
 		}
 		rows, err = result.RowsAffected()
 		if err != nil {
-			log.Println("failed to read affected rows:", err)
+			observability.Error("failed to read affected rows", map[string]any{
+				"deployment_id": id,
+				"error":         err.Error(),
+			})
 			return
 		}
 		if rows == 0 {
-			log.Println("invalid state transition, skipping:", id)
+			observability.Info("invalid state transition to FAILED", map[string]any{
+				"deployment_id": id,
+			})
 			return
 		}
 
 		if attemptCount < maxAttempts {
-			log.Println("Retrying deployment:", id)
+			observability.Info("retrying deployment", map[string]any{
+				"deployment_id": id,
+				"attempt_count": attemptCount,
+				"max_attempts":  maxAttempts,
+			})
 			logs.AddLog(id, "Retrying deployment")
 
 			result, err = db.DB.Exec(`
@@ -139,20 +178,32 @@ func ProcessNextDeployment() {
 			WHERE id = $2 AND status = 'FAILED'
 		`, attemptCount, id)
 			if err != nil {
-				log.Println("failed to queue retry:", err)
+				observability.Error("failed to queue retry", map[string]any{
+					"deployment_id": id,
+					"error":         err.Error(),
+				})
 				return
 			}
 			rows, err = result.RowsAffected()
 			if err != nil {
-				log.Println("failed to read affected rows:", err)
+				observability.Error("failed to read affected rows", map[string]any{
+					"deployment_id": id,
+					"error":         err.Error(),
+				})
 				return
 			}
 			if rows == 0 {
-				log.Println("invalid state transition, skipping:", id)
+				observability.Info("invalid state transition to QUEUED", map[string]any{
+					"deployment_id": id,
+				})
 				return
 			}
 		} else {
-			log.Println("Max retries reached:", id)
+			observability.Error("max retries reached", map[string]any{
+				"deployment_id": id,
+				"attempt_count": attemptCount,
+				"max_attempts":  maxAttempts,
+			})
 		}
 
 		return
@@ -162,12 +213,18 @@ func ProcessNextDeployment() {
 
 	checksum, err := utils.CalculateChecksum("/tmp/" + id)
 	if err != nil {
-		log.Println("checksum error:", err)
+		observability.Error("checksum calculation failed", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 	}
 
 	err = storage.UploadFolder(id)
 	if err != nil {
-		log.Println("Upload failed:", err)
+		observability.Error("artifact upload failed", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 
 		result, err = db.DB.Exec(`
 		UPDATE deployments
@@ -178,16 +235,24 @@ func ProcessNextDeployment() {
 		WHERE id = $1 AND status = 'BUILDING'
 		`, id, err.Error())
 		if err != nil {
-			log.Println("failed to update status:", err)
+			observability.Error("failed to update deployment to FAILED after upload error", map[string]any{
+				"deployment_id": id,
+				"error":         err.Error(),
+			})
 			return
 		}
 		rows, err = result.RowsAffected()
 		if err != nil {
-			log.Println("failed to read affected rows:", err)
+			observability.Error("failed to read affected rows", map[string]any{
+				"deployment_id": id,
+				"error":         err.Error(),
+			})
 			return
 		}
 		if rows == 0 {
-			log.Println("invalid state transition, skipping:", id)
+			observability.Info("invalid state transition to FAILED after upload error", map[string]any{
+				"deployment_id": id,
+			})
 		}
 
 		return
@@ -199,7 +264,10 @@ func ProcessNextDeployment() {
 	WHERE id = $2
 	`, checksum, id)
 	if err != nil {
-		log.Println("failed to store checksum:", err)
+		observability.Error("failed to store artifact checksum", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 	}
 
 	result, err = db.DB.Exec(`
@@ -212,21 +280,31 @@ func ProcessNextDeployment() {
 	`, id)
 
 	if err != nil {
-		log.Println("failed to update status:", err)
+		observability.Error("failed to update deployment to READY", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 		return
 	}
 	rows, err = result.RowsAffected()
 	if err != nil {
-		log.Println("failed to read affected rows:", err)
+		observability.Error("failed to read affected rows", map[string]any{
+			"deployment_id": id,
+			"error":         err.Error(),
+		})
 		return
 	}
 	if rows == 0 {
-		log.Println("invalid state transition, skipping:", id)
+		observability.Info("invalid state transition to READY", map[string]any{
+			"deployment_id": id,
+		})
 		return
 	}
 
 	logs.AddLog(id, "Deployment ready")
-	log.Println("Deployment ready:", id)
+	observability.Info("deployment ready", map[string]any{
+		"deployment_id": id,
+	})
 }
 
 func cleanupWorkspace(id string) error {

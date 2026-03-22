@@ -12,6 +12,7 @@ import (
 	"github.com/cotishq/shipyard/internal/api"
 	"github.com/cotishq/shipyard/internal/config"
 	"github.com/cotishq/shipyard/internal/db"
+	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
 )
@@ -27,9 +28,7 @@ func main() {
 		return c.String(http.StatusOK, "shipyard running")
 	})
 
-	e.GET("/healthz", func(c *echo.Context) error {
-		return c.String(http.StatusOK, "ok")
-	})
+	e.GET("/healthz", api.GetHealth)
 
 	apiKey := strings.TrimSpace(os.Getenv("SHIPYARD_API_KEY"))
 	if err := config.ValidateAPIKey(apiKey); err != nil && !config.AllowInsecureDefaults() {
@@ -56,7 +55,9 @@ func main() {
 
 	e.Static("/deployments", "/tmp")
 
-	log.Println("server running successfully on :8082")
+	observability.Info("api server starting", map[string]any{
+		"address": ":8082",
+	})
 	if err := e.Start(":8082"); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal("failed to start api server:", err)
 	}

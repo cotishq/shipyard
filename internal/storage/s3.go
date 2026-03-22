@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/config"
+	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -47,11 +49,17 @@ func Init() {
 		lastErr = ensureBucket(ctx, bucketName)
 		cancel()
 		if lastErr == nil {
-			log.Println("connected to minio")
+			observability.Info("connected to minio", map[string]any{
+				"bucket": bucketName,
+			})
 			return
 		}
 
-		log.Printf("waiting for MinIO (%d/%d): %v", i, maxAttempts, lastErr)
+		observability.Info("waiting for minio", map[string]any{
+			"attempt":      i,
+			"max_attempts": maxAttempts,
+			"error":        lastErr.Error(),
+		})
 		if i < maxAttempts {
 			time.Sleep(retryDelay)
 		}
@@ -79,7 +87,9 @@ func UploadFolder(deploymentID string) error {
 			return err
 		}
 
-		log.Println("Uploaded:", objectName)
+		observability.Info("uploaded artifact", map[string]any{
+			"object_name": objectName,
+		})
 		return nil
 	})
 }
@@ -101,6 +111,14 @@ func ensureBucket(ctx context.Context, name string) error {
 		return nil
 	}
 	return Client.MakeBucket(ctx, name, minio.MakeBucketOptions{})
+}
+
+func HealthCheck(ctx context.Context) error {
+	if Client == nil {
+		return errors.New("minio client is not initialized")
+	}
+	_, err := Client.BucketExists(ctx, bucketName)
+	return err
 }
 
 func getEnv(key, fallback string) string {

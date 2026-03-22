@@ -1,11 +1,11 @@
 package main
 
 import (
-	"log"
 	"time"
 
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/executor"
+	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 )
 
@@ -13,7 +13,7 @@ func main() {
 	db.Init()
 	storage.Init()
 
-	log.Println("worker started")
+	observability.Info("worker started", nil)
 
 	for {
 		executor.ProcessNextDeployment()
