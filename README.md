@@ -71,6 +71,20 @@ docker compose up --build
 curl http://localhost:8082/healthz
 ```
 
+### Smoke Test
+
+```bash
+bash scripts/smoke_test.sh
+```
+
+Optional overrides:
+- `API_URL`
+- `PROXY_URL`
+- `API_KEY`
+- `HEALTH_TIMEOUT_SECONDS`
+- `DEPLOY_TIMEOUT_SECONDS`
+- `POLL_INTERVAL_SECONDS`
+
 ### Create Deployment
 
 ```bash
