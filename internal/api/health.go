@@ -10,6 +10,9 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
+var dbHealthCheck = db.HealthCheck
+var storageHealthCheck = storage.HealthCheck
+
 func GetHealth(c *echo.Context) error {
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 	defer cancel()
@@ -24,14 +27,14 @@ func GetHealth(c *echo.Context) error {
 
 	statusCode := http.StatusOK
 
-	if err := db.HealthCheck(ctx); err != nil {
+	if err := dbHealthCheck(ctx); err != nil {
 		response["status"] = "degraded"
 		response["services"].(map[string]string)["database"] = "error"
 		response["database_error"] = err.Error()
 		statusCode = http.StatusServiceUnavailable
 	}
 
-	if err := storage.HealthCheck(ctx); err != nil {
+	if err := storageHealthCheck(ctx); err != nil {
 		response["status"] = "degraded"
 		response["services"].(map[string]string)["minio"] = "error"
 		response["minio_error"] = err.Error()
