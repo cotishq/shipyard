@@ -30,6 +30,16 @@ It accepts a Git repository + build preset, runs a containerized build, uploads 
 4. Worker stores artifact checksum and marks deployment as `READY`.
 5. Static files are served via API/NGINX route using deployment ID.
 
+## How Shipyard Works
+
+1. A user submits a GitHub repository, `build_preset`, and `output_dir` to `POST /deploy`.
+2. Shipyard stores the deployment in Postgres with status `QUEUED`.
+3. The worker picks up the job, clones the repo, and runs the preset build in Docker.
+4. Only the built artifact output is copied into the deployment workspace and uploaded to MinIO.
+5. Shipyard records deployment logs, lifecycle metadata, and an artifact checksum.
+6. If the build succeeds, the deployment becomes `READY` and is served at `/<deployment_id>`.
+7. Users can inspect status with `GET /deployments/:id`, list history with `GET /deployments`, and read logs with `GET /logs/:id`.
+
 ## Prerequisites
 
 - Docker
