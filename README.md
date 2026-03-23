@@ -114,7 +114,7 @@ Response includes `deployment_id`.
 
 - **`repo_url`**: required. Must be a valid `https` URL. Whitespace is rejected.
 - **`build_preset`**: required. One of the supported presets listed below.
-- **`output_dir`**: required for most presets. Must be a relative path inside the repo (no leading `/`, no `..` traversal). If omitted for `static-copy`, the entire repo working directory is copied to the artifact workspace.
+- **`output_dir`**: required for most presets. Must be a relative path inside the repo (no leading `/`, no `..` traversal). If omitted for `static-copy`, the repo contents are copied to the artifact workspace.
 
 #### Supported `build_preset` values
 
@@ -132,9 +132,8 @@ For safety, Shipyard currently only allows cloning from:
 ### Get Deployment Status
 
 ```bash
-curl http://localhost:8082/deployments/<deployment_id>
-# add auth header:
-# -H "X-API-Key: shipyard_api_key_change_me_please"
+curl http://localhost:8082/deployments/<deployment_id> \
+  -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
 Response now includes lifecycle metadata:
@@ -153,9 +152,8 @@ curl "http://localhost:8082/deployments?limit=20&offset=0" \
 ### Get Deployment Logs
 
 ```bash
-curl http://localhost:8082/logs/<deployment_id>
-# add auth header:
-# -H "X-API-Key: shipyard_api_key_change_me_please"
+curl http://localhost:8082/logs/<deployment_id> \
+  -H "X-API-Key: shipyard_api_key_change_me_please"
 ```
 
 ### Serve Deployment
@@ -176,7 +174,7 @@ Artifacts are stored in bucket `deployments`.
 
 ## Important Notes
 
-1. `POST /deploy`, `GET /deployments/:id`, and `GET /logs/:id` now require an API key:
+1. `POST /deploy`, `GET /deployments`, `GET /deployments/:id`, and `GET /logs/:id` require an API key:
    - Header `X-API-Key: <key>` or `Authorization: Bearer <key>`
    - Set via env var `SHIPYARD_API_KEY`
    - Default development key values are blocked unless `SHIPYARD_ALLOW_INSECURE_DEFAULTS=true`
