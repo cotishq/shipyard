@@ -1,3 +1,7 @@
+package models
+
+import "time"
+
 type Project struct {
 	ID            string    `json:"id"`
 	UserID        string    `json:"user_id"`

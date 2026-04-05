@@ -10,13 +10,21 @@ import (
 
 func GetLogs(c *echo.Context) error {
 	id := c.Param("id")
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
 
 	rows, err := db.DB.Query(`
-	SELECT message, created_at
-	FROM deployment_logs
-	WHERE deployment_id = $1
-	ORDER BY created_at
-`, id)
+		SELECT l.message, l.created_at
+		FROM deployment_logs l
+		JOIN deployments d ON d.id = l.deployment_id
+		JOIN projects p ON p.id = d.project_id
+		WHERE l.deployment_id = $1 AND p.user_id = $2
+		ORDER BY l.created_at
+	`, id, userID)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{

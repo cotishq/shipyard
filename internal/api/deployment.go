@@ -13,6 +13,7 @@ import (
 
 type DeploymentResponse struct {
 	ID                   string  `json:"id"`
+	ProjectID            *string `json:"project_id,omitempty"`
 	Status               string  `json:"status"`
 	AttempCount          string  `json:"attempt_count"`
 	MaxAttempts          string  `json:"max_attempts"`
@@ -26,20 +27,40 @@ type DeploymentResponse struct {
 
 func GetDeployment(c *echo.Context) error {
 	id := c.Param("id")
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
 
 	var resp DeploymentResponse
 	var (
+		projectID            sql.NullString
 		startedAt            sql.NullTime
 		finishedAt           sql.NullTime
 		errorMessage         sql.NullString
 		buildDurationSeconds sql.NullInt64
 	)
 
-	err := db.DB.QueryRow(`
-	    SELECT id, status, attempt_count, max_attempts, created_at, started_at, finished_at, error_message, build_duration_seconds
-		FROM deployments
-		WHERE id = $1
-		`, id).Scan(&resp.ID, &resp.Status, &resp.AttempCount, &resp.MaxAttempts, &resp.CreatedAt, &startedAt, &finishedAt, &errorMessage, &buildDurationSeconds)
+	err = db.DB.QueryRow(`
+		SELECT d.id, d.project_id, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		WHERE d.id = $1 AND p.user_id = $2
+		LIMIT 1
+	`, id, userID).Scan(
+		&resp.ID,
+		&projectID,
+		&resp.Status,
+		&resp.AttempCount,
+		&resp.MaxAttempts,
+		&resp.CreatedAt,
+		&startedAt,
+		&finishedAt,
+		&errorMessage,
+		&buildDurationSeconds,
+	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -52,6 +73,9 @@ func GetDeployment(c *echo.Context) error {
 		})
 	}
 
+	if projectID.Valid {
+		resp.ProjectID = &projectID.String
+	}
 	resp.StartedAt = nullTimeToStringPtr(startedAt)
 	resp.FinishedAt = nullTimeToStringPtr(finishedAt)
 	resp.ErrorMessage = nullStringToPtr(errorMessage)
@@ -62,6 +86,13 @@ func GetDeployment(c *echo.Context) error {
 }
 
 func GetDeployments(c *echo.Context) error {
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
+
 	limit := 20
 	offset := 0
 
@@ -86,11 +117,13 @@ func GetDeployments(c *echo.Context) error {
 	}
 
 	rows, err := db.DB.Query(`
-		SELECT id, status, attempt_count, max_attempts, created_at, started_at, finished_at, error_message, build_duration_seconds
-		FROM deployments
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		SELECT d.id, d.project_id, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		WHERE p.user_id = $1
+		ORDER BY d.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "failed to fetch deployments",
@@ -101,6 +134,7 @@ func GetDeployments(c *echo.Context) error {
 	deployments := make([]DeploymentResponse, 0, limit)
 	for rows.Next() {
 		var (
+			projectID    sql.NullString
 			id           string
 			status       string
 			attemptCount int
@@ -112,14 +146,20 @@ func GetDeployments(c *echo.Context) error {
 			buildSeconds sql.NullInt64
 		)
 
-		if err := rows.Scan(&id, &status, &attemptCount, &maxAttempts, &createdAt, &startedAt, &finishedAt, &errorMessage, &buildSeconds); err != nil {
+		if err := rows.Scan(&id, &projectID, &status, &attemptCount, &maxAttempts, &createdAt, &startedAt, &finishedAt, &errorMessage, &buildSeconds); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to scan deployment row",
 			})
 		}
 
+		var projectIDPtr *string
+		if projectID.Valid {
+			projectIDPtr = &projectID.String
+		}
+
 		deployments = append(deployments, DeploymentResponse{
 			ID:                   id,
+			ProjectID:            projectIDPtr,
 			Status:               status,
 			AttempCount:          fmt.Sprintf("%d", attemptCount),
 			MaxAttempts:          fmt.Sprintf("%d", maxAttempts),

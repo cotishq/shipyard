@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,23 +11,38 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-func APIKeyAuthMiddleware(expectedKey string) echo.MiddlewareFunc {
+func APIKeyAuthMiddleware(db *sql.DB) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
-			provided := strings.TrimSpace(c.Request().Header.Get("X-API-Key"))
-			if provided == "" {
+			token := strings.TrimSpace(c.Request().Header.Get("X-API-Key"))
+			if token == "" {
 				auth := strings.TrimSpace(c.Request().Header.Get("Authorization"))
 				const bearer = "Bearer "
 				if strings.HasPrefix(auth, bearer) {
-					provided = strings.TrimSpace(strings.TrimPrefix(auth, bearer))
+					token = strings.TrimSpace(strings.TrimPrefix(auth, bearer))
 				}
 			}
 
-			if subtle.ConstantTimeCompare([]byte(provided), []byte(expectedKey)) != 1 {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "unauthorized",
-				})
+			if token == "" {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			}
+
+			tokenHash := hashToken(token)
+
+			var userID string
+			err := db.QueryRow(`
+				SELECT user_id
+				FROM api_tokens
+				WHERE token_hash = $1
+				  AND is_active = TRUE
+				  AND (expires_at IS NULL OR expires_at > NOW())
+				LIMIT 1
+			`, tokenHash).Scan(&userID)
+			if err != nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			}
+
+			c.Set("user_id", userID)
 
 			return next(c)
 		}

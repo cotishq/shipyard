@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/api"
-	"github.com/cotishq/shipyard/internal/config"
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
@@ -30,11 +29,6 @@ func main() {
 
 	e.GET("/healthz", api.GetHealth)
 
-	apiKey := strings.TrimSpace(os.Getenv("SHIPYARD_API_KEY"))
-	if err := config.ValidateAPIKey(apiKey); err != nil && !config.AllowInsecureDefaults() {
-		log.Fatal(err)
-	}
-
 	limitPerMinute := 60
 	if raw := strings.TrimSpace(os.Getenv("SHIPYARD_RATE_LIMIT_PER_MINUTE")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
@@ -43,12 +37,15 @@ func main() {
 	}
 
 	secured := e.Group("")
-	secured.Use(api.APIKeyAuthMiddleware(apiKey))
+	secured.Use(api.APIKeyAuthMiddleware(db.DB))
 	secured.Use(api.RateLimitMiddleware(api.NewInMemoryRateLimiter(limitPerMinute, time.Minute)))
 	secured.GET("/logs/:id", api.GetLogs)
 	secured.POST("/deploy", api.CreateDeployment(db.DB))
 	secured.GET("/deployments", api.GetDeployments)
 	secured.GET("/deployments/:id", api.GetDeployment)
+	secured.POST("/projects", api.CreateProject(db.DB))
+	secured.GET("/projects", api.GetProjects(db.DB))
+	secured.GET("/projects/:id", api.GetProject(db.DB))
 
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)

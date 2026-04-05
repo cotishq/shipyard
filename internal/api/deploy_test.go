@@ -3,7 +3,7 @@ package api
 import "testing"
 
 func TestValidateDeployRequest_AllowsStaticCopyFromGitHub(t *testing.T) {
-	req := &DeployRequest{
+	req := &ProjectCreateRequest{
 		RepoURL:     "https://github.com/mdn/beginner-html-site",
 		BuildPreset: "static-copy",
 		OutputDir:   "",
@@ -20,7 +20,7 @@ func TestValidateDeployRequest_AllowsStaticCopyFromGitHub(t *testing.T) {
 }
 
 func TestValidateDeployRequest_RejectsDisallowedHost(t *testing.T) {
-	req := &DeployRequest{
+	req := &ProjectCreateRequest{
 		RepoURL:     "https://gitlab.com/example/project",
 		BuildPreset: "static-copy",
 		OutputDir:   "",
@@ -33,7 +33,7 @@ func TestValidateDeployRequest_RejectsDisallowedHost(t *testing.T) {
 }
 
 func TestValidateDeployRequest_RejectsUnsupportedPreset(t *testing.T) {
-	req := &DeployRequest{
+	req := &ProjectCreateRequest{
 		RepoURL:     "https://github.com/mdn/beginner-html-site",
 		BuildPreset: "custom",
 		OutputDir:   "dist",
@@ -46,7 +46,7 @@ func TestValidateDeployRequest_RejectsUnsupportedPreset(t *testing.T) {
 }
 
 func TestValidateDeployRequest_RejectsPathTraversal(t *testing.T) {
-	req := &DeployRequest{
+	req := &ProjectCreateRequest{
 		RepoURL:     "https://github.com/mdn/beginner-html-site",
 		BuildPreset: "vite",
 		OutputDir:   "../dist",
@@ -59,7 +59,7 @@ func TestValidateDeployRequest_RejectsPathTraversal(t *testing.T) {
 }
 
 func TestValidateDeployRequest_NormalizesDotOutputDir(t *testing.T) {
-	req := &DeployRequest{
+	req := &ProjectCreateRequest{
 		RepoURL:     "https://github.com/mdn/beginner-html-site",
 		BuildPreset: "vite",
 		OutputDir:   ".",

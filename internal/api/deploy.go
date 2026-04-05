@@ -24,13 +24,18 @@ var allowedBuildPresets = map[string]string{
 }
 
 type DeployRequest struct {
-	RepoURL     string `json:"repo_url"`
-	BuildPreset string `json:"build_preset"`
-	OutputDir   string `json:"output_dir"`
+	ProjectID string `json:"project_id"`
 }
 
 func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 	return func(c *echo.Context) error {
+		userID, err := authenticatedUserID(c)
+		if err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "unauthorized",
+			})
+		}
+
 		req := new(DeployRequest)
 
 		if err := c.Bind(req); err != nil {
@@ -38,7 +43,41 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 				"error": "invalid request",
 			})
 		}
-		buildCommand, err := validateDeployRequest(req)
+		req.ProjectID = strings.TrimSpace(req.ProjectID)
+		if req.ProjectID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "project_id is required",
+			})
+		}
+
+		var (
+			repoURL     string
+			buildPreset string
+			outputDir   string
+		)
+		err = db.QueryRow(`
+			SELECT repo_url, build_preset, output_dir
+			FROM projects
+			WHERE id = $1 AND user_id = $2 AND is_active = TRUE
+			LIMIT 1
+		`, req.ProjectID, userID).Scan(&repoURL, &buildPreset, &outputDir)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return c.JSON(http.StatusNotFound, map[string]string{
+					"error": "project not found",
+				})
+			}
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "failed to resolve project configuration",
+			})
+		}
+
+		config := &ProjectCreateRequest{
+			RepoURL:     repoURL,
+			BuildPreset: buildPreset,
+			OutputDir:   outputDir,
+		}
+		buildCommand, err := resolveBuildCommand(config)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": err.Error(),
@@ -48,9 +87,9 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 		id := uuid.New().String()
 
 		_, err = db.Exec(`
-		INSERT INTO deployments (id, repo_url, build_command, output_dir, status)
-		VALUES ($1, $2, $3, $4, $5)
-		`, id, req.RepoURL, buildCommand, req.OutputDir, "QUEUED")
+		INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, status)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		`, id, req.ProjectID, config.RepoURL, buildCommand, config.OutputDir, "QUEUED")
 
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -64,7 +103,15 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 	}
 }
 
-func validateDeployRequest(req *DeployRequest) (string, error) {
+type ProjectCreateRequest struct {
+	Name          string `json:"name"`
+	RepoURL       string `json:"repo_url"`
+	BuildPreset   string `json:"build_preset"`
+	OutputDir     string `json:"output_dir"`
+	DefaultBranch string `json:"default_branch"`
+}
+
+func resolveBuildCommand(req *ProjectCreateRequest) (string, error) {
 	req.RepoURL = strings.TrimSpace(req.RepoURL)
 	req.BuildPreset = strings.TrimSpace(req.BuildPreset)
 	req.OutputDir = strings.TrimSpace(req.OutputDir)
@@ -116,6 +163,34 @@ func validateDeployRequest(req *DeployRequest) (string, error) {
 	}
 	req.OutputDir = cleaned
 	return buildCommand, nil
+}
+
+func validateProjectCreateRequest(req *ProjectCreateRequest) error {
+	req.Name = strings.TrimSpace(req.Name)
+	req.DefaultBranch = strings.TrimSpace(req.DefaultBranch)
+
+	if req.Name == "" {
+		return errors.New("name is required")
+	}
+	if len(req.Name) > 120 {
+		return errors.New("name is too long")
+	}
+	if req.DefaultBranch == "" {
+		req.DefaultBranch = "main"
+	}
+	if strings.ContainsAny(req.DefaultBranch, " \t\r\n") {
+		return errors.New("default_branch must not contain whitespace")
+	}
+
+	_, err := resolveBuildCommand(req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDeployRequest(req *ProjectCreateRequest) (string, error) {
+	return resolveBuildCommand(req)
 }
 
 func validateRepoHost(host string) error {
