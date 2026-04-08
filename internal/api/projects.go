@@ -134,3 +134,74 @@ func GetProject(db *sql.DB) echo.HandlerFunc {
 		return c.JSON(http.StatusOK, p)
 	}
 }
+
+func TriggerProjectDeployment(db *sql.DB) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		userID, err := authenticatedUserID(c)
+		if err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "unauthorized",
+			})
+		}
+
+		projectID := strings.TrimSpace(c.Param("id"))
+		if projectID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "project id is required",
+			})
+		}
+
+		var (
+			repoURL     string
+			buildPreset string
+			outputDir   string
+		)
+
+		err = db.QueryRow(`
+			SELECT repo_url, build_preset, output_dir
+			FROM projects
+			WHERE id = $1 AND user_id = $2 AND is_active = TRUE
+			LIMIT 1
+		`, projectID, userID).Scan(&repoURL, &buildPreset, &outputDir)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return c.JSON(http.StatusNotFound, map[string]string{
+					"error": "project not found",
+				})
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to resolve project configuration",
+			})
+		}
+
+		cfg := &ProjectCreateRequest{
+			RepoURL:     repoURL,
+			BuildPreset: buildPreset,
+			OutputDir:   outputDir,
+		}
+
+		buildCommand, err := resolveBuildCommand(cfg)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+		}
+
+		deploymentID := uuid.NewString()
+
+		_, err = db.Exec(`
+			INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, status)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, deploymentID, projectID, cfg.RepoURL, buildCommand, cfg.OutputDir, "QUEUED")
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to create deployment",
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]string{
+			"deployment_id": deploymentID,
+		})
+	}
+}
+

@@ -46,6 +46,8 @@ func main() {
 	secured.POST("/projects", api.CreateProject(db.DB))
 	secured.GET("/projects", api.GetProjects(db.DB))
 	secured.GET("/projects/:id", api.GetProject(db.DB))
+	secured.POST("/projects/:id/deployments", api.TriggerProjectDeployment(db.DB))
+
 
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
