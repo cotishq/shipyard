@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(raw)))
 	return hex.EncodeToString(sum[:])
