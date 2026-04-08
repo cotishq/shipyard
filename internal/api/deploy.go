@@ -51,16 +51,17 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 		}
 
 		var (
-			repoURL     string
-			buildPreset string
-			outputDir   string
+			repoURL       string
+			buildPreset   string
+			outputDir     string
+			defaultBranch string
 		)
 		err = db.QueryRow(`
 			SELECT repo_url, build_preset, output_dir
 			FROM projects
 			WHERE id = $1 AND user_id = $2 AND is_active = TRUE
 			LIMIT 1
-		`, req.ProjectID, userID).Scan(&repoURL, &buildPreset, &outputDir)
+		`, req.ProjectID, userID).Scan(&repoURL, &buildPreset, &outputDir, &defaultBranch)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return c.JSON(http.StatusNotFound, map[string]string{
@@ -86,10 +87,15 @@ func CreateDeployment(db *sql.DB) echo.HandlerFunc {
 
 		id := uuid.New().String()
 
+		branch := strings.TrimSpace(defaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
+
 		_, err = db.Exec(`
 		INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, status)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		`, id, req.ProjectID, config.RepoURL, buildCommand, config.OutputDir, "QUEUED")
+		`, id, req.ProjectID, config.RepoURL, buildCommand, config.OutputDir, branch, "QUEUED")
 
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
