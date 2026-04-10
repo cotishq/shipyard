@@ -1,11 +1,12 @@
 # Shipyard
 
 Shipyard is an MVP deployment orchestration platform for static sites.
-It accepts a Git repository + build preset, runs a containerized build, uploads artifacts to MinIO (S3-compatible), and serves deployments by ID.
+It uses project-level configuration (repo + build settings), runs containerized builds, uploads artifacts to MinIO (S3-compatible), and serves deployments by ID.
 
 ## Features
 
-- Deployment API (`POST /deploy`)
+- Project APIs (`POST /projects`, `GET /projects`, `GET /projects/:id`)
+- Deployment trigger API (`POST /projects/:id/deployments`)
 - FIFO worker with retry logic
 - Docker-based build execution
 - MinIO artifact storage
@@ -24,7 +25,7 @@ It accepts a Git repository + build preset, runs a containerized build, uploads 
 
 ## Architecture
 
-1. API receives deployment request and inserts a `QUEUED` deployment row.
+1. API receives project deployment trigger and inserts a `QUEUED` deployment row linked to `project_id`.
 2. Worker polls queue, transitions to `BUILDING`, and runs the build in Docker.
 3. Built files are uploaded to MinIO bucket `deployments` under `<deployment_id>/...`.
 4. Worker stores artifact checksum and marks deployment as `READY`.
@@ -32,13 +33,13 @@ It accepts a Git repository + build preset, runs a containerized build, uploads 
 
 ## How Shipyard Works
 
-1. A user submits a GitHub repository, `build_preset`, and `output_dir` to `POST /deploy`.
-2. Shipyard stores the deployment in Postgres with status `QUEUED`.
-3. The worker picks up the job, clones the repo, and runs the preset build in Docker.
-4. Only the built artifact output is copied into the deployment workspace and uploaded to MinIO.
-5. Shipyard records deployment logs, lifecycle metadata, and an artifact checksum.
-6. If the build succeeds, the deployment becomes `READY` and is served at `/<deployment_id>`.
-7. Users can inspect status with `GET /deployments/:id`, list history with `GET /deployments`, and read logs with `GET /logs/:id`.
+1. A user creates a project with `repo_url`, `build_preset`, `output_dir`, and `default_branch`.
+2. A deployment is triggered for that project via `POST /projects/:id/deployments`.
+3. Shipyard inserts a `QUEUED` deployment row linked to the project.
+4. The worker clones the configured repo/branch, runs the preset build in Docker, and uploads artifact output to MinIO.
+5. Shipyard records deployment logs, lifecycle metadata, and artifact checksum.
+6. If the build succeeds, deployment becomes `READY` and is served at `/<deployment_id>`.
+7. Users inspect status with `GET /deployments/:id`, list history with `GET /deployments`, and read logs with `GET /logs/:id`.
 
 ## Prerequisites
 
@@ -60,7 +61,7 @@ This starts:
 - `worker`
 - `nginx` on `localhost:8001`
 
-API key for protected endpoints (from compose example): `shipyard_api_key_change_me_please`
+Token auth is required for protected endpoints (`X-API-Key` or `Authorization: Bearer <token>`).
 
 ## Database Setup
 
@@ -91,30 +92,35 @@ Optional overrides:
 - `API_URL`
 - `PROXY_URL`
 - `API_KEY`
+- `PROJECT_NAME`
 - `HEALTH_TIMEOUT_SECONDS`
 - `DEPLOY_TIMEOUT_SECONDS`
 - `POLL_INTERVAL_SECONDS`
 
-### Create Deployment
+### Create Project
 
 ```bash
-curl -X POST http://localhost:8082/deploy \
-  -H "X-API-Key: shipyard_api_key_change_me_please" \
+curl -X POST http://localhost:8082/projects \
+  -H "X-API-Key: <token>" \
   -H "Content-Type: application/json" \
   -d '{
+    "name":"my-site",
     "repo_url":"https://github.com/<owner>/<repo>",
     "build_preset":"vite",
-    "output_dir":"dist"
+    "output_dir":"dist",
+    "default_branch":"main"
   }'
 ```
 
-Response includes `deployment_id`.
+Response includes `project_id`.
 
 #### Request fields
 
+- **`name`**: required. Unique per user.
 - **`repo_url`**: required. Must be a valid `https` URL. Whitespace is rejected.
 - **`build_preset`**: required. One of the supported presets listed below.
 - **`output_dir`**: required for most presets. Must be a relative path inside the repo (no leading `/`, no `..` traversal). If omitted for `static-copy`, the repo contents are copied to the artifact workspace.
+- **`default_branch`**: optional. Defaults to `main`.
 
 #### Supported `build_preset` values
 
@@ -129,11 +135,20 @@ For safety, Shipyard currently only allows cloning from:
 
 - `github.com`
 
+### Trigger Deployment For Project
+
+```bash
+curl -X POST http://localhost:8082/projects/<project_id>/deployments \
+  -H "X-API-Key: <token>"
+```
+
+Response includes `deployment_id`.
+
 ### Get Deployment Status
 
 ```bash
 curl http://localhost:8082/deployments/<deployment_id> \
-  -H "X-API-Key: shipyard_api_key_change_me_please"
+  -H "X-API-Key: <token>"
 ```
 
 Response now includes lifecycle metadata:
@@ -146,14 +161,21 @@ Response now includes lifecycle metadata:
 
 ```bash
 curl "http://localhost:8082/deployments?limit=20&offset=0" \
-  -H "X-API-Key: shipyard_api_key_change_me_please"
+  -H "X-API-Key: <token>"
 ```
 
 ### Get Deployment Logs
 
 ```bash
 curl http://localhost:8082/logs/<deployment_id> \
-  -H "X-API-Key: shipyard_api_key_change_me_please"
+  -H "X-API-Key: <token>"
+```
+
+### List Projects
+
+```bash
+curl http://localhost:8082/projects \
+  -H "X-API-Key: <token>"
 ```
 
 ### Serve Deployment
@@ -174,10 +196,10 @@ Artifacts are stored in bucket `deployments`.
 
 ## Important Notes
 
-1. `POST /deploy`, `GET /deployments`, `GET /deployments/:id`, and `GET /logs/:id` require an API key:
+1. `POST /projects`, `GET /projects`, `GET /projects/:id`, `POST /projects/:id/deployments`, `GET /deployments`, `GET /deployments/:id`, and `GET /logs/:id` require token auth:
    - Header `X-API-Key: <key>` or `Authorization: Bearer <key>`
-   - Set via env var `SHIPYARD_API_KEY`
-   - Default development key values are blocked unless `SHIPYARD_ALLOW_INSECURE_DEFAULTS=true`
+   - Tokens are stored hashed in `api_tokens`
+   - Raw tokens are never stored in DB
 
 2. `nginx.conf` proxies to `http://api:8082` inside Docker Compose network.
 If you run NGINX outside Compose, adjust upstream accordingly.

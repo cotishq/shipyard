@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/cotishq/shipyard/internal/models"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	"github.com/lib/pq"
 )
 
 func CreateProject(db *sql.DB) echo.HandlerFunc {
@@ -39,6 +41,12 @@ func CreateProject(db *sql.DB) echo.HandlerFunc {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
 		`, projectID, userID, req.Name, req.RepoURL, req.BuildPreset, req.OutputDir, req.DefaultBranch)
 		if err != nil {
+			var pgErr *pq.Error
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return c.JSON(http.StatusConflict, map[string]string{
+					"error": "project name already exists",
+				})
+			}
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to create project",
 			})
@@ -159,7 +167,7 @@ func TriggerProjectDeployment(db *sql.DB) echo.HandlerFunc {
 		)
 
 		err = db.QueryRow(`
-			SELECT repo_url, build_preset, output_dir
+			SELECT repo_url, build_preset, output_dir, default_branch
 			FROM projects
 			WHERE id = $1 AND user_id = $2 AND is_active = TRUE
 			LIMIT 1
@@ -196,8 +204,8 @@ func TriggerProjectDeployment(db *sql.DB) echo.HandlerFunc {
 		}
 
 		_, err = db.Exec(`
-			INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, status)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, branch, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, deploymentID, projectID, cfg.RepoURL, buildCommand, cfg.OutputDir, branch, "QUEUED")
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{

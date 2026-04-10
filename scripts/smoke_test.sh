@@ -3,10 +3,11 @@ set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8082}"
 PROXY_URL="${PROXY_URL:-http://localhost:8001}"
-API_KEY="${API_KEY:-shipyard_api_key_change_me_please}"
+API_KEY="${API_KEY:-shipyard_dev_token_v2}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
 DEPLOY_TIMEOUT_SECONDS="${DEPLOY_TIMEOUT_SECONDS:-300}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-5}"
+PROJECT_NAME="${PROJECT_NAME:-smoke-project-$(date +%s)}"
 
 echo "Starting Shipyard stack..."
 docker compose up --build -d
@@ -28,15 +29,29 @@ while true; do
   sleep "${POLL_INTERVAL_SECONDS}"
 done
 
-echo "Creating smoke deployment..."
-deploy_response="$(curl -fsS -X POST "${API_URL}/deploy" \
+echo "Creating smoke project..."
+project_response="$(curl -fsS -X POST "${API_URL}/projects" \
   -H "X-API-Key: ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
+    "name":"'"${PROJECT_NAME}"'",
     "repo_url":"https://github.com/mdn/beginner-html-site",
     "build_preset":"static-copy",
-    "output_dir":""
+    "output_dir":"",
+    "default_branch":"main"
   }')"
+
+echo "Project response: ${project_response}"
+
+project_id="$(printf '%s' "${project_response}" | grep -oE '"project_id":"[^"]+"' | cut -d'"' -f4)"
+if [[ -z "${project_id}" ]]; then
+  echo "Failed to extract project_id"
+  exit 1
+fi
+
+echo "Triggering deployment from project ${project_id}..."
+deploy_response="$(curl -fsS -X POST "${API_URL}/projects/${project_id}/deployments" \
+  -H "X-API-Key: ${API_KEY}")"
 
 echo "Deployment response: ${deploy_response}"
 
