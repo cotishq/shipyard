@@ -14,6 +14,7 @@ import (
 type DeploymentResponse struct {
 	ID                   string  `json:"id"`
 	ProjectID            *string `json:"project_id,omitempty"`
+	Branch               string  `json:"branch,omitempty"`
 	Status               string  `json:"status"`
 	AttempCount          string  `json:"attempt_count"`
 	MaxAttempts          string  `json:"max_attempts"`
@@ -44,7 +45,7 @@ func GetDeployment(c *echo.Context) error {
 	)
 
 	err = db.DB.QueryRow(`
-		SELECT d.id, d.project_id, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
+		SELECT d.id, d.project_id, d.branch, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
 		FROM deployments d
 		JOIN projects p ON p.id = d.project_id
 		WHERE d.id = $1 AND p.user_id = $2
@@ -52,6 +53,7 @@ func GetDeployment(c *echo.Context) error {
 	`, id, userID).Scan(
 		&resp.ID,
 		&projectID,
+		&resp.Branch,
 		&resp.Status,
 		&resp.AttempCount,
 		&resp.MaxAttempts,
@@ -117,7 +119,7 @@ func GetDeployments(c *echo.Context) error {
 	}
 
 	rows, err := db.DB.Query(`
-		SELECT d.id, d.project_id, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
+		SELECT d.id, d.project_id, d.branch, d.status, d.attempt_count, d.max_attempts, d.created_at, d.started_at, d.finished_at, d.error_message, d.build_duration_seconds
 		FROM deployments d
 		JOIN projects p ON p.id = d.project_id
 		WHERE p.user_id = $1
@@ -136,6 +138,7 @@ func GetDeployments(c *echo.Context) error {
 		var (
 			projectID    sql.NullString
 			id           string
+			branch       string
 			status       string
 			attemptCount int
 			maxAttempts  int
@@ -146,7 +149,7 @@ func GetDeployments(c *echo.Context) error {
 			buildSeconds sql.NullInt64
 		)
 
-		if err := rows.Scan(&id, &projectID, &status, &attemptCount, &maxAttempts, &createdAt, &startedAt, &finishedAt, &errorMessage, &buildSeconds); err != nil {
+		if err := rows.Scan(&id, &projectID, &branch, &status, &attemptCount, &maxAttempts, &createdAt, &startedAt, &finishedAt, &errorMessage, &buildSeconds); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to scan deployment row",
 			})
@@ -160,6 +163,7 @@ func GetDeployments(c *echo.Context) error {
 		deployments = append(deployments, DeploymentResponse{
 			ID:                   id,
 			ProjectID:            projectIDPtr,
+			Branch:               branch,
 			Status:               status,
 			AttempCount:          fmt.Sprintf("%d", attemptCount),
 			MaxAttempts:          fmt.Sprintf("%d", maxAttempts),

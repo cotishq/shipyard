@@ -14,20 +14,25 @@ import (
 	"github.com/cotishq/shipyard/internal/observability"
 )
 
-func RunBuild(deploymentID, repoURL, buildCommand, outputDir string) error {
+func RunBuild(deploymentID, repoURL, buildCommand, outputDir, branch string) error {
 	observability.Info("starting docker build", map[string]any{
 		"deployment_id": deploymentID,
 		"output_dir":    outputDir,
+		"branch":        branch,
 	})
 
 	repoURL = strings.TrimSpace(repoURL)
 	buildCommand = strings.TrimSpace(buildCommand)
 	outputDir = strings.TrimSpace(outputDir)
+	branch = strings.TrimSpace(branch)
 	if repoURL == "" || strings.ContainsAny(repoURL, "\r\n") {
 		return fmt.Errorf("invalid repo_url")
 	}
 	if buildCommand == "" {
 		return fmt.Errorf("invalid build_command")
+	}
+	if branch == "" {
+		branch = "main"
 	}
 	if strings.HasPrefix(outputDir, "/") || outputDir == ".." || strings.HasPrefix(outputDir, "../") || strings.Contains(outputDir, "/../") {
 		return fmt.Errorf("invalid output_dir")
@@ -62,7 +67,7 @@ set -eu
 SRC_DIR=$(mktemp -d)
 trap 'rm -rf "$SRC_DIR"' EXIT
 
-git clone --depth 1 "$REPO_URL" "$SRC_DIR/repo"
+git clone --depth 1 --branch "$BRANCH" --single-branch "$REPO_URL" "$SRC_DIR/repo"
 REPO_SIZE_MB=$(du -sm "$SRC_DIR/repo" | cut -f1)
 if [ "$REPO_SIZE_MB" -gt "$MAX_REPO_SIZE_MB" ]; then
 	echo "repository exceeds max size: ${REPO_SIZE_MB}MB > ${MAX_REPO_SIZE_MB}MB" >&2
@@ -91,6 +96,7 @@ fi
 		"-v", hostDir+":/workspace",
 		"-w", "/workspace",
 		"-e", "REPO_URL="+repoURL,
+		"-e", "BRANCH="+branch,
 		"-e", "BUILD_COMMAND="+buildCommand,
 		"-e", "OUTPUT_DIR="+outputDir,
 		"-e", "MAX_REPO_SIZE_MB="+strconv.Itoa(maxRepoSizeMB),

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"os"
+	"strings"
 
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/logs"
@@ -36,15 +37,15 @@ func ProcessNextDeployment() {
 		return
 	}
 
-	var id, repoURL, buildCommand, outputDir string
+	var id, repoURL, buildCommand, outputDir, branch string
 
 	err = db.DB.QueryRow(`
-	SELECT id, repo_url, build_command, output_dir
+	SELECT id, repo_url, build_command, output_dir, branch
 	FROM deployments
 	WHERE status = 'QUEUED'
 	ORDER BY created_at
 	LIMIT 1
-	`).Scan(&id, &repoURL, &buildCommand, &outputDir)
+	`).Scan(&id, &repoURL, &buildCommand, &outputDir, &branch)
 
 	if err != nil {
 		return
@@ -105,7 +106,11 @@ func ProcessNextDeployment() {
 	}
 
 	logs.AddLog(id, "Running build...")
-	err = RunBuild(id, repoURL, buildCommand, outputDir)
+	if strings.TrimSpace(branch) == "" {
+		branch = "main"
+	}
+
+	err = RunBuild(id, repoURL, buildCommand, outputDir, branch)
 
 	if err != nil {
 		observability.Error("deployment build failed", map[string]any{
