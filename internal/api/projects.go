@@ -159,55 +159,13 @@ func TriggerProjectDeployment(db *sql.DB) echo.HandlerFunc {
 			})
 		}
 
-		var (
-			repoURL       string
-			buildPreset   string
-			outputDir     string
-			defaultBranch string
-		)
-
-		err = db.QueryRow(`
-			SELECT repo_url, build_preset, output_dir, default_branch
-			FROM projects
-			WHERE id = $1 AND user_id = $2 AND is_active = TRUE
-			LIMIT 1
-		`, projectID, userID).Scan(&repoURL, &buildPreset, &outputDir, &defaultBranch)
+		deploymentID, err := triggerDeploymentForProject(db, projectID, userID)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return c.JSON(http.StatusNotFound, map[string]string{
 					"error": "project not found",
 				})
 			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "failed to resolve project configuration",
-			})
-		}
-
-		cfg := &ProjectCreateRequest{
-			RepoURL:     repoURL,
-			BuildPreset: buildPreset,
-			OutputDir:   outputDir,
-		}
-
-		buildCommand, err := resolveBuildCommand(cfg)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": err.Error(),
-			})
-		}
-
-		deploymentID := uuid.NewString()
-
-		branch := strings.TrimSpace(defaultBranch)
-		if branch == "" {
-			branch = "main"
-		}
-
-		_, err = db.Exec(`
-			INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, branch, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, deploymentID, projectID, cfg.RepoURL, buildCommand, cfg.OutputDir, branch, "QUEUED")
-		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": "failed to create deployment",
 			})

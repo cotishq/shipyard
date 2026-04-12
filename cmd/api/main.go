@@ -50,11 +50,15 @@ func main() {
 	secured.POST("/tokens", api.CreateToken(db.DB))
 	secured.GET("/tokens", api.ListTokens(db.DB))
 	secured.DELETE("/tokens/:id", api.RevokeToken(db.DB))
+	secured.POST("/projects/:id/webhook", api.CreateProjectWebhook(db.DB))
+
 
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
 
 	e.Static("/deployments", "/tmp")
+	e.POST("/webhooks/github", api.HandleGitHubWebhook(db.DB))
+
 
 	observability.Info("api server starting", map[string]any{
 		"address": ":8082",
