@@ -14,6 +14,7 @@ import (
 	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -26,6 +27,13 @@ func main() {
 	e.GET("/", func(c *echo.Context) error {
 		return c.String(http.StatusOK, "shipyard running")
 	})
+
+	e.GET("/metrics", func(c *echo.Context) error {
+		promhttp.Handler().ServeHTTP(c.Response(), c.Request())
+		return nil
+	})
+
+	
 
 	e.GET("/healthz", api.GetHealth)
 
