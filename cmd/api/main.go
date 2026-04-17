@@ -11,12 +11,11 @@ import (
 
 	"github.com/cotishq/shipyard/internal/api"
 	"github.com/cotishq/shipyard/internal/db"
+	"github.com/cotishq/shipyard/internal/metrics"
 	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/cotishq/shipyard/internal/metrics"
-
 )
 
 func main() {
@@ -35,8 +34,6 @@ func main() {
 		promhttp.Handler().ServeHTTP(c.Response(), c.Request())
 		return nil
 	})
-
-	
 
 	e.GET("/healthz", api.GetHealth)
 
@@ -63,13 +60,11 @@ func main() {
 	secured.DELETE("/tokens/:id", api.RevokeToken(db.DB))
 	secured.POST("/projects/:id/webhook", api.CreateProjectWebhook(db.DB))
 
-
 	e.GET("/:id", api.ServeDeployment)
 	e.GET("/:id/*", api.ServeDeployment)
 
 	e.Static("/deployments", "/tmp")
 	e.POST("/webhooks/github", api.HandleGitHubWebhook(db.DB))
-
 
 	observability.Info("api server starting", map[string]any{
 		"address": ":8082",

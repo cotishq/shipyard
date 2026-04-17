@@ -108,4 +108,3 @@ func IncDeployRequest() {
 func IncWebhookRequest(provider, result string) {
 	WebhookRequestsTotal.WithLabelValues(provider, result).Inc()
 }
-

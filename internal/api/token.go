@@ -14,19 +14,19 @@ import (
 )
 
 type createTokenRequest struct {
-	Label     string  `json:"label"`
-	ExpiresIn *int64  `json:"expires_in_seconds,omitempty"`
+	Label     string `json:"label"`
+	ExpiresIn *int64 `json:"expires_in_seconds,omitempty"`
 }
 
 type tokenResponse struct {
-	ID         string  `json:"id"`
-	Token      string  `json:"token,omitempty"`
-	TokenPrefix string `json:"token_prefix"`
-	Label      string  `json:"label"`
-	IsActive   bool    `json:"is_active"`
-	LastUsedAt *string `json:"last_used_at,omitempty"`
-	ExpiresAt  *string `json:"expires_at,omitempty"`
-	CreatedAt  string  `json:"created_at"`
+	ID          string  `json:"id"`
+	Token       string  `json:"token,omitempty"`
+	TokenPrefix string  `json:"token_prefix"`
+	Label       string  `json:"label"`
+	IsActive    bool    `json:"is_active"`
+	LastUsedAt  *string `json:"last_used_at,omitempty"`
+	ExpiresAt   *string `json:"expires_at,omitempty"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 func CreateToken(db *sql.DB) echo.HandlerFunc {
@@ -101,7 +101,7 @@ func ListTokens(db *sql.DB) echo.HandlerFunc {
 		out := make([]tokenResponse, 0)
 		for rows.Next() {
 			var (
-				r tokenResponse
+				r        tokenResponse
 				lastUsed sql.NullTime
 				expires  sql.NullTime
 				created  time.Time
