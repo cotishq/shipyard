@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cotishq/shipyard/internal/metrics"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
@@ -75,6 +76,7 @@ func HandleGitHubWebhook(db *sql.DB) echo.HandlerFunc {
 		deliveryID := c.Request().Header.Get("X-GitHub-Delivery")
 
 		if event == "" || deliveryID == "" {
+			metrics.IncWebhookRequest("github", "bad_request")
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "missing github headers"})
 		}
 
@@ -92,6 +94,7 @@ func HandleGitHubWebhook(db *sql.DB) echo.HandlerFunc {
 			Ref string `json:"ref"`
 		}
 		if err := json.Unmarshal(body, &payload); err != nil {
+			metrics.IncWebhookRequest("github", "bad_request")
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid payload"})
 		}
 
@@ -107,11 +110,13 @@ func HandleGitHubWebhook(db *sql.DB) echo.HandlerFunc {
 			LIMIT 1
 		`, repoURL).Scan(&projectID, &defaultBranch)
 		if err != nil {
+			metrics.IncWebhookRequest("github", "project_not_found")
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "no matching project"})
 		}
 
 		// check branch filter
 		if branch != defaultBranch {
+			metrics.IncWebhookRequest("github", "ignored")
 			return c.JSON(http.StatusOK, map[string]string{"status": "ignored"})
 		}
 
@@ -122,15 +127,17 @@ func HandleGitHubWebhook(db *sql.DB) echo.HandlerFunc {
 			WHERE project_id = $1 AND provider = 'github' AND is_active = TRUE
 		`, projectID).Scan(&secret)
 		if err != nil {
+			metrics.IncWebhookRequest("github", "project_not_found")
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "webhook not configured"})
 		}
 
 		if !verifyGitHubSignature(secret, body, c.Request().Header.Get("X-Hub-Signature-256")) {
+			metrics.IncWebhookRequest("github", "invalid_signature")
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid signature"})
 		}
 
 		// dedupe
-		_, err = db.Exec(`
+		res, err := db.Exec(`
 			INSERT INTO webhook_events (id, provider, delivery_id, project_id, event_type)
 			VALUES ($1, 'github', $2, $3, $4)
 			ON CONFLICT (provider, delivery_id) DO NOTHING
@@ -139,11 +146,18 @@ func HandleGitHubWebhook(db *sql.DB) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to record event"})
 		}
 
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			metrics.IncWebhookRequest("github", "duplicate")
+			return c.JSON(http.StatusOK, map[string]string{"status": "duplicate"})
+		}
+
 		// trigger deployment
 		deploymentID, err := triggerDeploymentForProject(db, projectID, "")
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create deployment"})
 		}
+		metrics.IncWebhookRequest("github", "accepted")
 		return c.JSON(http.StatusOK, map[string]string{"deployment_id": deploymentID})
 	}
 }

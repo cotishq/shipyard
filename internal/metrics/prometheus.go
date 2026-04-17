@@ -1,90 +1,111 @@
 package metrics
 
-import (
-	"database/sql"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-)
-
+import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	// Gauges
-    QueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
-        Name: "shipyard_queue_depth",
-        Help: "Number of deployments waiting to be processed",
-    })
+	QueueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "shipyard",
+		Name:      "queue_depth",
+		Help:      "Number of deployments currently in QUEUED state.",
+	})
 
-    ActiveBuilds = promauto.NewGauge(prometheus.GaugeOpts{
-        Name: "shipyard_active_builds",
-        Help: "Number of deployments currently building",
-    })
+	ActiveBuilds = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "shipyard",
+		Name:      "active_builds",
+		Help:      "Number of deployments currently in BUILDING state.",
+	})
 
-	// Counters
-    DeploymentSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-        Name: "shipyard_deployment_success_total",
-        Help: "Total number of successful deployments",
-    }, []string{"project_id"})
+	BuildDurationSeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "shipyard",
+		Name:      "build_duration_seconds",
+		Help:      "Duration of successful deployment builds in seconds.",
+		Buckets:   prometheus.DefBuckets,
+	})
 
-    DeploymentFailureTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-        Name: "shipyard_deployment_failure_total",
-        Help: "Total number of failed deployments",
-    }, []string{"project_id"})
+	DeploymentSuccessTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "deployment_success_total",
+		Help:      "Total number of successful deployments.",
+	})
 
-    RetryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-        Name: "shipyard_retry_total",
-        Help: "Total number of deployment retries",
-    }, []string{"project_id"})
+	DeploymentFailureTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "deployment_failure_total",
+		Help:      "Total number of failed deployments.",
+	})
 
-	// Histogram for build duration
-    BuildDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
-        Name:    "shipyard_build_duration_seconds",
-        Help:    "Build duration in seconds",
-        Buckets: []float64{10, 30, 60, 120, 300, 600, 1200},
-    }, []string{"project_id", "build_preset"})
+	RetryTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "retry_total",
+		Help:      "Total number of deployment retries.",
+	})
 
+	ArtifactUploadFailureTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "artifact_upload_failure_total",
+		Help:      "Total number of deployment artifact upload failures.",
+	})
 
+	DeployRequestsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "deploy_requests_total",
+		Help:      "Total number of deployment trigger requests.",
+	})
+
+	WebhookRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "shipyard",
+		Name:      "webhook_requests_total",
+		Help:      "Total number of webhook requests by provider and result.",
+	}, []string{"provider", "result"})
 )
-// UpdateGauges queries the database and updates gauge metrics
-func UpdateGauges(db *sql.DB) error {
-    // Queue depth
-    var queueCount int
-    err := db.QueryRow(`
-        SELECT COUNT(*) FROM deployments WHERE status = 'QUEUED'
-    `).Scan(&queueCount)
-    if err != nil {
-        return err
-    }
-    QueueDepth.Set(float64(queueCount))
 
-    // Active builds
-    var buildCount int
-    err = db.QueryRow(`
-        SELECT COUNT(*) FROM deployments WHERE status = 'BUILDING'
-    `).Scan(&buildCount)
-    if err != nil {
-        return err
-    }
-    ActiveBuilds.Set(float64(buildCount))
-
-    return nil
-}
-// RecordDeploymentSuccess increments success counter
-func RecordDeploymentSuccess(projectID string) {
-    DeploymentSuccessTotal.WithLabelValues(projectID).Inc()
+func Init() {
+	prometheus.MustRegister(
+		QueueDepth,
+		ActiveBuilds,
+		BuildDurationSeconds,
+		DeploymentSuccessTotal,
+		DeploymentFailureTotal,
+		RetryTotal,
+		ArtifactUploadFailureTotal,
+		DeployRequestsTotal,
+		WebhookRequestsTotal,
+	)
 }
 
-// RecordDeploymentFailure increments failure counter
-func RecordDeploymentFailure(projectID string) {
-    DeploymentFailureTotal.WithLabelValues(projectID).Inc()
+func SetQueueDepth(n int) {
+	QueueDepth.Set(float64(n))
 }
 
-// RecordRetry increments retry counter
-func RecordRetry(projectID string) {
-    RetryTotal.WithLabelValues(projectID).Inc()
+func SetActiveBuilds(n int) {
+	ActiveBuilds.Set(float64(n))
 }
 
-// RecordBuildDuration records build duration
-func RecordBuildDuration(projectID, buildPreset string, durationSeconds float64) {
-    BuildDurationSeconds.WithLabelValues(projectID, buildPreset).Observe(durationSeconds)
+func ObserveBuildDuration(seconds float64) {
+	BuildDurationSeconds.Observe(seconds)
 }
+
+func IncDeploymentSuccess() {
+	DeploymentSuccessTotal.Inc()
+}
+
+func IncDeploymentFailure() {
+	DeploymentFailureTotal.Inc()
+}
+
+func IncRetry() {
+	RetryTotal.Inc()
+}
+
+func IncArtifactUploadFailure() {
+	ArtifactUploadFailureTotal.Inc()
+}
+
+func IncDeployRequest() {
+	DeployRequestsTotal.Inc()
+}
+
+func IncWebhookRequest(provider, result string) {
+	WebhookRequestsTotal.WithLabelValues(provider, result).Inc()
+}
+

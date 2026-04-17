@@ -1,11 +1,14 @@
 package executor
 
 import (
+	"database/sql"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cotishq/shipyard/internal/db"
 	"github.com/cotishq/shipyard/internal/logs"
+	"github.com/cotishq/shipyard/internal/metrics"
 	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/cotishq/shipyard/internal/utils"
@@ -22,6 +25,18 @@ func ProcessNextDeployment() {
 	  FROM deployments
 	  WHERE status = 'BUILDING'
 	`).Scan(&currentlyBuilding)
+
+	metrics.SetActiveBuilds(currentlyBuilding)
+
+	var queuedCount int
+	err = db.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM deployments
+		WHERE status = 'QUEUED'
+	`).Scan(&queuedCount)
+	if err == nil {
+		metrics.SetQueueDepth(queuedCount)
+	}
 	if err != nil {
 		observability.Error("failed to count active builds", map[string]any{
 			"error": err.Error(),
@@ -167,6 +182,7 @@ func ProcessNextDeployment() {
 			})
 			return
 		}
+		metrics.IncDeploymentFailure()
 
 		if attemptCount < maxAttempts {
 			observability.Info("retrying deployment", map[string]any{
@@ -203,6 +219,7 @@ func ProcessNextDeployment() {
 				})
 				return
 			}
+			metrics.IncRetry()
 		} else {
 			observability.Error("max retries reached", map[string]any{
 				"deployment_id": id,
@@ -259,6 +276,8 @@ func ProcessNextDeployment() {
 				"deployment_id": id,
 			})
 		}
+		metrics.IncArtifactUploadFailure()
+		metrics.IncDeploymentFailure()
 
 		return
 	}
@@ -304,6 +323,18 @@ func ProcessNextDeployment() {
 			"deployment_id": id,
 		})
 		return
+	}
+
+	metrics.IncDeploymentSuccess()
+
+	var startedAt sql.NullTime
+	err = db.DB.QueryRow(`
+		SELECT started_at
+		FROM deployments
+		WHERE id = $1
+	`, id).Scan(&startedAt)
+	if err == nil && startedAt.Valid {
+		metrics.ObserveBuildDuration(time.Since(startedAt.Time).Seconds())
 	}
 
 	logs.AddLog(id, "Deployment ready")

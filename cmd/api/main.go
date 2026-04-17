@@ -15,12 +15,15 @@ import (
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/cotishq/shipyard/internal/metrics"
+
 )
 
 func main() {
 	db.Init()
 
 	storage.Init()
+	metrics.Init()
 
 	e := echo.New()
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cotishq/shipyard/internal/metrics"
 	"github.com/cotishq/shipyard/internal/models"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -158,6 +159,8 @@ func TriggerProjectDeployment(db *sql.DB) echo.HandlerFunc {
 				"error": "project id is required",
 			})
 		}
+
+		metrics.IncDeployRequest()
 
 		deploymentID, err := triggerDeploymentForProject(db, projectID, userID)
 		if err != nil {
