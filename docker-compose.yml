@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
   postgres:
     image: postgres:15
@@ -69,6 +70,9 @@ services:
       MAX_BUILD_TIME_MINUTES: 10
       MAX_CONCURRENT_BUILDS: 1
       MAX_LOG_SIZE_BYTES: 8192
+      WORKER_METRICS_ADDR: :8083
+    ports:
+      - "8083:8083"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -87,4 +91,32 @@ services:
       - "8001:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
+
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: shipyard-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./internal/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - api
+      - worker
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shipyard-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+
       
