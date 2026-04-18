@@ -16,6 +16,8 @@ import (
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/labstack/echo/v5/middleware"
+
 )
 
 func main() {
@@ -25,6 +27,26 @@ func main() {
 	metrics.Init()
 
 	e := echo.New()
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{
+			"http://localhost:3000",
+			"http://localhost:3001",
+		},
+		AllowMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowHeaders: []string{
+			echo.HeaderOrigin,
+			echo.HeaderContentType,
+			echo.HeaderAccept,
+			"X-API-Key",
+			"Authorization",
+		},
+	}))
+	
 
 	e.GET("/", func(c *echo.Context) error {
 		return c.String(http.StatusOK, "shipyard running")
