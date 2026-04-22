@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { readToken, writeToken } from "@/lib/token";
 import type { Project } from "@/lib/types";
+import { Eye, EyeOff } from "lucide-react";
 
 export function TokenGate() {
   const router = useRouter();
   const [token, setToken] = useState(() => readToken());
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,45 +41,54 @@ export function TokenGate() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,_rgba(76,175,80,0.14),_transparent_30%),linear-gradient(180deg,_#f7faf7_0%,_#edf4ee_100%)] px-6 py-16 text-slate-900">
-      <div className="w-full max-w-xl rounded-[28px] border border-slate-200/80 bg-white/90 p-8 shadow-[0_24px_80px_rgba(32,53,38,0.12)] backdrop-blur">
+    <main className="flex min-h-screen items-center justify-center bg-[#09090b] px-6 py-16 text-zinc-50">
+      <div className="w-full max-w-xl rounded-[28px] border border-zinc-800 bg-zinc-900/50 p-8">
         <div className="mb-8">
-          <p className="mb-3 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+          <p className="mb-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
             Shipyard Control Plane
           </p>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">
+          <h1 className="text-4xl font-semibold tracking-tight text-zinc-50">
             Enter your API token
           </h1>
-          <p className="mt-3 max-w-lg text-base leading-7 text-slate-600">
-            This frontend talks directly to your Shipyard API. The first step is a
-            thin token gate, then the projects and deployment views sit behind it.
-          </p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-slate-700">
+            <span className="mb-2 block text-sm font-medium text-zinc-300">
               API token
             </span>
-            <input
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              type="password"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder="shipyard_..."
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <div className="relative">
+              <input
+                className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 pr-12 font-mono text-sm text-zinc-50 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                type={showToken ? "text" : "password"}
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder="shipyard_..."
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {showToken ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
           </label>
 
           {error ? (
-            <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <p className="rounded-2xl border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-400">
               {error}
             </p>
           ) : null}
 
           <button
-            className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
             type="submit"
             disabled={isSubmitting}
           >
