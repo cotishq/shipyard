@@ -23,7 +23,7 @@ jobs:
 
       - name: Verify formatting
         run: |
-          unformatted="$(gofmt -l .)"
+          unformatted="$(gofmt -l . | grep -v '.go/pkg/mod')"
           if [ -n "$unformatted" ]; then
             echo "These files need gofmt:"
             echo "$unformatted"
