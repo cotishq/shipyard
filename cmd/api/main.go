@@ -15,9 +15,8 @@ import (
 	"github.com/cotishq/shipyard/internal/observability"
 	"github.com/cotishq/shipyard/internal/storage"
 	"github.com/labstack/echo/v5"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/labstack/echo/v5/middleware"
-
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -46,7 +45,6 @@ func main() {
 			"Authorization",
 		},
 	}))
-	
 
 	e.GET("/", func(c *echo.Context) error {
 		return c.String(http.StatusOK, "shipyard running")
