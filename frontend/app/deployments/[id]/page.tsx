@@ -1,10 +1,12 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Check,
   Clock,
+  Copy,
   ExternalLink,
   GitBranch,
   Loader2,
@@ -214,39 +216,129 @@ export default function DeploymentDetailPage({
           </div>
         ) : null}
 
-        <div>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-medium">Logs</h2>
-            {isActive ? (
-              <span className="inline-flex items-center gap-2 text-xs text-zinc-500">
-                <Clock className="h-3.5 w-3.5" />
-                Polling every 4s
-              </span>
-            ) : null}
-          </div>
-
-          <div className="max-h-[520px] overflow-auto rounded-lg border border-zinc-800 bg-black p-4 font-mono text-xs text-zinc-300">
-            {logs.length === 0 ? (
-              <p className="text-zinc-600">No logs yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {logs.map((log, index) => (
-                  <div
-                    key={`${log.time}-${index}`}
-                    className="grid gap-3 border-b border-zinc-900 pb-3 last:border-0 last:pb-0 md:grid-cols-[180px_1fr]"
-                  >
-                    <time className="text-zinc-600">{formatDate(log.time)}</time>
-                    <pre className="whitespace-pre-wrap break-words">
-                      {log.message}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <LogsViewer logs={logs} isActive={isActive} />
       </div>
     </main>
+  );
+}
+
+function LogsViewer({
+  logs,
+  isActive,
+}: {
+  logs: DeploymentLog[];
+  isActive: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const lines = flattenLogs(logs);
+
+  useEffect(() => {
+    if (!autoScroll) return;
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [autoScroll, lines.length]);
+
+  async function copyLogs() {
+    const text = logs
+      .map((log) => `[${formatDate(log.time)}]\n${log.message}`)
+      .join("\n\n");
+
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-medium">Logs</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            {lines.length === 0
+              ? "Waiting for worker output"
+              : `${lines.length} log ${lines.length === 1 ? "line" : "lines"}`}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isActive ? (
+            <span className="inline-flex h-8 items-center gap-2 rounded border border-zinc-800 bg-zinc-900/40 px-3 text-xs text-zinc-500">
+              <Clock className="h-3.5 w-3.5" />
+              Polling every 4s
+            </span>
+          ) : null}
+          <Button
+            variant={autoScroll ? "secondary" : "outline"}
+            size="xs"
+            onClick={() => setAutoScroll((value) => !value)}
+          >
+            Auto-scroll
+          </Button>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={copyLogs}
+            disabled={logs.length === 0}
+          >
+            {copied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-black">
+        <div className="flex items-center gap-2 border-b border-zinc-900 bg-zinc-950 px-4 py-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+          <span className="ml-2 font-mono text-xs text-zinc-600">
+            deployment.log
+          </span>
+        </div>
+
+        <div
+          ref={scrollRef}
+          className="max-h-[560px] overflow-auto font-mono text-xs"
+        >
+          {lines.length === 0 ? (
+            <div className="px-4 py-12 text-center text-zinc-600">
+              No logs yet.
+            </div>
+          ) : (
+            <div className="min-w-full py-3">
+              {lines.map((line, index) => (
+                <div
+                  key={`${line.time}-${index}-${line.text}`}
+                  className="grid grid-cols-[56px_96px_minmax(0,1fr)] gap-3 px-4 py-0.5 leading-5 hover:bg-zinc-900/60"
+                >
+                  <span className="select-none text-right text-zinc-700">
+                    {index + 1}
+                  </span>
+                  <time className="select-none whitespace-nowrap text-zinc-600">
+                    {formatLogTime(line.time)}
+                  </time>
+                  <pre
+                    className={`whitespace-pre-wrap break-words ${getLogLineClass(
+                      line.text,
+                    )}`}
+                  >
+                    {line.text || " "}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -291,6 +383,53 @@ function getStatusBadge(status: string) {
       {status}
     </span>
   );
+}
+
+function flattenLogs(logs: DeploymentLog[]) {
+  return logs.flatMap((log) => {
+    const parts = log.message.split(/\r?\n/);
+    return parts.map((text) => ({
+      time: log.time,
+      text,
+    }));
+  });
+}
+
+function getLogLineClass(text: string) {
+  const normalized = text.toLowerCase();
+
+  if (
+    normalized.includes("error") ||
+    normalized.includes("failed") ||
+    normalized.includes("fatal")
+  ) {
+    return "text-red-300";
+  }
+
+  if (
+    normalized.includes("warn") ||
+    normalized.includes("retry") ||
+    normalized.includes("not found")
+  ) {
+    return "text-amber-300";
+  }
+
+  if (
+    normalized.includes("successful") ||
+    normalized.includes("deployment ready")
+  ) {
+    return "text-emerald-300";
+  }
+
+  return "text-zinc-300";
+}
+
+function formatLogTime(value: string) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function formatDate(value?: string) {
