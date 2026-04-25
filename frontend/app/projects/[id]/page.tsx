@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import type { Project, Deployment } from "@/lib/types";
@@ -13,18 +13,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, GitBranch, Play, ExternalLink, Clock, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  ExternalLink,
+  GitBranch,
+  Loader2,
+  Play,
+} from "lucide-react";
 
 interface ProjectDetailPageProps {
   params: Promise<{ id: string }>;
 }
+
+type TriggerDeploymentResponse = {
+  deployment_id: string;
+};
 
 export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [deployError, setDeployError] = useState("");
 
   useEffect(() => {
     params.then(async (p) => {
@@ -43,7 +56,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
           );
         setDeployments(filtered);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load project");
+        setLoadError(e instanceof Error ? e.message : "Failed to load project");
       } finally {
         setLoading(false);
       }
@@ -53,14 +66,18 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const handleDeploy = async () => {
     if (!project) return;
     setDeploying(true);
+    setDeployError("");
     try {
-      const newDeployment = await apiFetch<Deployment>(
+      const { deployment_id } = await apiFetch<TriggerDeploymentResponse>(
         `/projects/${project.id}/deployments`,
         { method: "POST" }
       );
+      const newDeployment = await apiFetch<Deployment>(
+        `/deployments/${deployment_id}`
+      );
       setDeployments((prev) => [newDeployment, ...prev]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to trigger deployment");
+      setDeployError(e instanceof Error ? e.message : "Failed to trigger deployment");
     } finally {
       setDeploying(false);
     }
@@ -94,12 +111,12 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     );
   }
 
-  if (error || !project) {
+  if (loadError || !project) {
     return (
       <main className="min-h-screen bg-[#09090b] text-zinc-50">
         <div className="mx-auto max-w-5xl px-6 py-12">
           <div className="rounded-lg border border-red-900 bg-red-950 px-4 py-3 text-sm text-red-400">
-            {error || "Project not found"}
+            {loadError || "Project not found"}
           </div>
         </div>
       </main>
@@ -133,14 +150,25 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
               className="gap-2 bg-emerald-600 hover:bg-emerald-700"
             >
               {deploying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deploying...
+                </>
               ) : (
-                <Play className="h-4 w-4" />
+                <>
+                  <Play className="h-4 w-4" />
+                  Deploy
+                </>
               )}
-              Deploy
             </Button>
           </div>
         </div>
+
+        {deployError ? (
+          <div className="mb-8 rounded-lg border border-red-900 bg-red-950 px-4 py-3 text-sm text-red-400">
+            {deployError}
+          </div>
+        ) : null}
 
         <div className="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/30 p-6">
           <h2 className="mb-4 text-lg font-medium">Project Details</h2>
@@ -200,6 +228,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                     <TableHead className="text-zinc-400">Created</TableHead>
                     <TableHead className="text-zinc-400">Duration</TableHead>
                     <TableHead className="text-zinc-400">URL</TableHead>
+                    <TableHead className="text-right text-zinc-400">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -224,7 +253,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {deployment.url ? (
+                        {deployment.status === "READY" && deployment.url ? (
                           <a
                             href={deployment.url}
                             target="_blank"
@@ -237,6 +266,14 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                         ) : (
                           <span className="text-zinc-600">-</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="xs" asChild>
+                          <Link href={`/deployments/${deployment.id}`}>
+                            Open
+                            <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

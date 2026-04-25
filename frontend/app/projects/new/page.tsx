@@ -20,7 +20,7 @@ export default function NewProjectPage() {
   const [name, setName] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [buildPreset, setBuildPreset] = useState("static-copy");
-  const [outputDir, setOutputDir] = useState("dist");
+  const [outputDir, setOutputDir] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("main");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -111,7 +111,13 @@ export default function NewProjectPage() {
                 id="buildPreset"
                 required
                 value={buildPreset}
-                onChange={(e) => setBuildPreset(e.target.value)}
+                onChange={(e) => {
+                  const nextPreset = e.target.value;
+                  setBuildPreset(nextPreset);
+                  if (nextPreset !== "static-copy" && outputDir.trim() === "") {
+                    setOutputDir("dist");
+                  }
+                }}
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-zinc-50 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="static-copy">Static Copy</option>
@@ -128,10 +134,10 @@ export default function NewProjectPage() {
               <input
                 id="outputDir"
                 type="text"
-                required
+                required={buildPreset !== "static-copy"}
                 value={outputDir}
                 onChange={(e) => setOutputDir(e.target.value)}
-                placeholder="dist"
+                placeholder={buildPreset === "static-copy" ? "repo root" : "dist"}
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
