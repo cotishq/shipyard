@@ -30,6 +30,14 @@ export type DeploymentLog = {
   time: string;
 };
 
+export type ProjectWebhook = {
+  webhook_id: string;
+  secret: string;
+  endpoint: string;
+  provider: string;
+  is_active: boolean;
+};
+
 export type ApiError = {
   error: string;
 };

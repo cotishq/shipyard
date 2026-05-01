@@ -74,6 +74,7 @@ func main() {
 	secured.POST("/projects", api.CreateProject(db.DB))
 	secured.GET("/projects", api.GetProjects(db.DB))
 	secured.GET("/projects/:id", api.GetProject(db.DB))
+	secured.GET("/projects/:id/webhook", api.GetProjectWebhook(db.DB))
 	secured.POST("/projects/:id/deployments", api.TriggerProjectDeployment(db.DB))
 	secured.POST("/tokens", api.CreateToken(db.DB))
 	secured.GET("/tokens", api.ListTokens(db.DB))

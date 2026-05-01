@@ -76,6 +76,21 @@ func TestCreateProjectWebhook_NoAuth(t *testing.T) {
 	}
 }
 
+func TestGetProjectWebhook_NoAuth(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/projects/some-id/webhook", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := GetProjectWebhook(nil)(c); err != nil {
+		t.Fatalf("expected no handler error, got %v", err)
+	}
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", rec.Code)
+	}
+}
+
 func TestCreateProjectWebhook_MissingProjectID(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/projects//webhook", bytes.NewReader([]byte("{}")))
@@ -84,6 +99,31 @@ func TestCreateProjectWebhook_MissingProjectID(t *testing.T) {
 	c.Set("user_id", "user123")
 
 	if err := CreateProjectWebhook(nil)(c); err != nil {
+		t.Fatalf("expected no handler error, got %v", err)
+	}
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request, got %d", rec.Code)
+	}
+
+	var respBody map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &respBody); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if respBody["error"] != "project id is required" {
+		t.Fatalf("expected 'project id is required' error, got %q", respBody["error"])
+	}
+}
+
+func TestGetProjectWebhook_MissingProjectID(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/projects//webhook", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("user_id", "user123")
+
+	if err := GetProjectWebhook(nil)(c); err != nil {
 		t.Fatalf("expected no handler error, got %v", err)
 	}
 
@@ -120,6 +160,33 @@ func TestWebhookCreateResponse_HasRequiredFields(t *testing.T) {
 	}
 
 	requiredFields := []string{"webhook_id", "secret", "endpoint"}
+	for _, field := range requiredFields {
+		if _, ok := unmarshalled[field]; !ok {
+			t.Fatalf("expected required field %q", field)
+		}
+	}
+}
+
+func TestWebhookGetResponse_HasRequiredFields(t *testing.T) {
+	resp := webhookGetResponse{
+		WebhookID: "webhook-123",
+		Secret:    "secret-456",
+		Endpoint:  "/webhooks/github",
+		Provider:  "github",
+		IsActive:  true,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("failed to marshal response: %v", err)
+	}
+
+	var unmarshalled map[string]any
+	if err := json.Unmarshal(data, &unmarshalled); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	requiredFields := []string{"webhook_id", "secret", "endpoint", "provider", "is_active"}
 	for _, field := range requiredFields {
 		if _, ok := unmarshalled[field]; !ok {
 			t.Fatalf("expected required field %q", field)

@@ -22,6 +22,58 @@ type webhookCreateResponse struct {
 	Endpoint  string `json:"endpoint"`
 }
 
+type webhookGetResponse struct {
+	WebhookID string `json:"webhook_id"`
+	Secret    string `json:"secret"`
+	Endpoint  string `json:"endpoint"`
+	Provider  string `json:"provider"`
+	IsActive  bool   `json:"is_active"`
+}
+
+func GetProjectWebhook(db *sql.DB) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		userID, err := authenticatedUserID(c)
+		if err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		}
+
+		projectID := strings.TrimSpace(c.Param("id"))
+		if projectID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "project id is required"})
+		}
+
+		var exists bool
+		err = db.QueryRow(`
+			SELECT EXISTS (
+				SELECT 1 FROM projects WHERE id = $1 AND user_id = $2
+			)
+		`, projectID, userID).Scan(&exists)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load project"})
+		}
+		if !exists {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "project not found"})
+		}
+
+		var resp webhookGetResponse
+		err = db.QueryRow(`
+			SELECT id, secret, provider, is_active
+			FROM project_webhooks
+			WHERE project_id = $1 AND provider = 'github'
+			LIMIT 1
+		`, projectID).Scan(&resp.WebhookID, &resp.Secret, &resp.Provider, &resp.IsActive)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "webhook not found"})
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load webhook"})
+		}
+
+		resp.Endpoint = "/webhooks/github"
+		return c.JSON(http.StatusOK, resp)
+	}
+}
+
 func CreateProjectWebhook(db *sql.DB) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		userID, err := authenticatedUserID(c)
