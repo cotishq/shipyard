@@ -14,6 +14,8 @@ It uses project-level configuration (repo + build settings), runs containerized 
 - Deployment logs endpoint
 - NGINX reverse proxy
 - Artifact checksum persistence (`artifact_checksum`)
+- GitHub Webhooks for automated deployments
+- Deployment actions: retry, cancel, and redeploy
 
 ## Tech Stack
 
@@ -40,6 +42,15 @@ It uses project-level configuration (repo + build settings), runs containerized 
 5. Shipyard records deployment logs, lifecycle metadata, and artifact checksum.
 6. If the build succeeds, deployment becomes `READY` and is served at `/<deployment_id>`.
 7. Users inspect status with `GET /deployments/:id`, list history with `GET /deployments`, and read logs with `GET /logs/:id`.
+8. Users can retry failed deployments, cancel queued/building deployments, or redeploy from any completed/failed deployment.
+
+### Deployment Statuses
+
+- `QUEUED` - Deployment is waiting in the queue
+- `BUILDING` - Worker is currently building the deployment
+- `READY` - Deployment was built successfully and is being served
+- `FAILED` - Deployment failed (can be retried)
+- `CANCELLED` - Deployment was cancelled by user
 
 ## Prerequisites
 
@@ -171,6 +182,39 @@ curl http://localhost:8082/logs/<deployment_id> \
   -H "X-API-Key: <token>"
 ```
 
+### Retry Deployment
+
+Retries a failed deployment by resetting it back to the queue with attempt count reset to 0.
+
+```bash
+curl -X POST http://localhost:8082/deployments/<deployment_id>/retry \
+  -H "X-API-Key: <token>"
+```
+
+Response includes `deployment_id`. Only failed deployments can be retried.
+
+### Cancel Deployment
+
+Cancels a queued or building deployment.
+
+```bash
+curl -X POST http://localhost:8082/deployments/<deployment_id>/cancel \
+  -H "X-API-Key: <token>"
+```
+
+Response includes `deployment_id`. Only queued or building deployments can be cancelled.
+
+### Redeploy Deployment
+
+Creates a new deployment based on an existing deployment's configuration.
+
+```bash
+curl -X POST http://localhost:8082/deployments/<deployment_id>/redeploy \
+  -H "X-API-Key: <token>"
+```
+
+Response includes the new `deployment_id`. Can be used on ready, failed, or cancelled deployments.
+
 ### List Projects
 
 ```bash
@@ -185,6 +229,66 @@ curl http://localhost:8082/projects \
   - `http://localhost:8082/<deployment_id>/assets/app.js`
 - Via NGINX proxy:
   - `http://localhost:8001/<deployment_id>`
+
+### Create API Token
+
+```bash
+curl -X POST http://localhost:8082/tokens \
+  -H "X-API-Key: <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-token","expires_at":"2025-12-31T23:59:59Z"}'
+```
+
+Response includes the raw token (shown only once).
+
+### List API Tokens
+
+```bash
+curl http://localhost:8082/tokens \
+  -H "X-API-Key: <token>"
+```
+
+### Revoke API Token
+
+```bash
+curl -X DELETE http://localhost:8082/tokens/<token_id> \
+  -H "X-API-Key: <token>"
+```
+
+## Webhooks
+
+Shipyard supports GitHub webhooks for automated deployments. Each project can have its own webhook URL.
+
+### Create Project Webhook
+
+```bash
+curl -X POST http://localhost:8082/projects/<project_id>/webhook \
+  -H "X-API-Key: <token>"
+```
+
+Response includes `webhook_url` (e.g., `http://localhost:8082/webhooks/github?project_id=<project_id>&secret=<secret>`).
+
+### Get Project Webhook
+
+```bash
+curl http://localhost:8082/projects/<project_id>/webhook \
+  -H "X-API-Key: <token>"
+```
+
+Returns the webhook URL and secret. The secret is used to verify webhook payloads.
+
+### GitHub Webhook Configuration
+
+In your GitHub repository settings:
+
+1. Go to **Settings > Webhooks > Add webhook**
+2. **Payload URL**: Use the webhook URL from above
+3. **Content type**: `application/json`
+4. **Events**: Select "Just the push event" (or customize as needed)
+5. **Secret**: Enter the secret from the webhook response
+6. **Add webhook**
+
+When a push event occurs, GitHub sends a webhook to Shipyard, which automatically triggers a new deployment for the configured branch.
 
 ## MinIO
 
