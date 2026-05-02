@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
@@ -11,6 +12,9 @@ import {
   GitBranch,
   Loader2,
   RotateCw,
+  Play,
+  Square,
+  Repeat,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,16 +26,21 @@ interface DeploymentDetailPageProps {
 }
 
 const ACTIVE_STATUSES = new Set(["QUEUED", "BUILDING"]);
+const CANCELABLE_STATUSES = new Set(["QUEUED", "BUILDING"]);
+const RETRYABLE_STATUSES = new Set(["FAILED"]);
+const REDEPLOYABLE_STATUSES = new Set(["READY", "FAILED", "CANCELLED"]);
 
 export default function DeploymentDetailPage({
   params,
 }: DeploymentDetailPageProps) {
   const { id: deploymentId } = use(params);
+  const router = useRouter();
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [logs, setLogs] = useState<DeploymentLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +133,48 @@ export default function DeploymentDetailPage({
   }
 
   const isActive = ACTIVE_STATUSES.has(deployment.status);
+  const canCancel = CANCELABLE_STATUSES.has(deployment.status);
+  const canRetry = RETRYABLE_STATUSES.has(deployment.status);
+  const canRedeploy = REDEPLOYABLE_STATUSES.has(deployment.status);
+
+  const handleRetry = async () => {
+    setActionLoading("retry");
+    try {
+      await apiFetch(`/deployments/${deploymentId}/retry`, { method: "POST" });
+      await refreshDeployment();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to retry deployment");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    setActionLoading("cancel");
+    try {
+      await apiFetch(`/deployments/${deploymentId}/cancel`, { method: "POST" });
+      await refreshDeployment();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to cancel deployment");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRedeploy = async () => {
+    setActionLoading("redeploy");
+    try {
+      const result = await apiFetch<{ deployment_id: string }>(
+        `/deployments/${deploymentId}/redeploy`,
+        { method: "POST" }
+      );
+      router.push(`/deployments/${result.deployment_id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to redeploy");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#09090b] text-zinc-50">
@@ -150,18 +201,62 @@ export default function DeploymentDetailPage({
                 {deployment.id}
               </h1>
             </div>
-            <Button
-              variant="outline"
-              onClick={refreshDeployment}
-              disabled={refreshing}
-            >
-              {refreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCw className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              {canRetry && (
+                <Button
+                  variant="outline"
+                  onClick={handleRetry}
+                  disabled={actionLoading === "retry"}
+                >
+                  {actionLoading === "retry" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="h-4 w-4" />
+                  )}
+                  Retry
+                </Button>
               )}
-              Refresh
-            </Button>
+              {canCancel && (
+                <Button
+                  variant="outline"
+                  onClick={handleCancel}
+                  disabled={actionLoading === "cancel"}
+                >
+                  {actionLoading === "cancel" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Square className="h-4 w-4" />
+                  )}
+                  Cancel
+                </Button>
+              )}
+              {canRedeploy && (
+                <Button
+                  variant="outline"
+                  onClick={handleRedeploy}
+                  disabled={actionLoading === "redeploy"}
+                >
+                  {actionLoading === "redeploy" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  Redeploy
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={refreshDeployment}
+                disabled={refreshing || isActive}
+              >
+                {refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCw className="h-4 w-4" />
+                )}
+                Refresh
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -372,6 +467,7 @@ function getStatusBadge(status: string) {
     BUILDING: "bg-amber-900/30 text-amber-400",
     READY: "bg-emerald-900/30 text-emerald-400",
     FAILED: "bg-red-900/30 text-red-400",
+    CANCELLED: "bg-zinc-700/50 text-zinc-400",
   };
 
   return (

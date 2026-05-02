@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cotishq/shipyard/internal/db"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
 
@@ -207,4 +208,173 @@ func nullInt64ToIntPtr(value sql.NullInt64) *int {
 	}
 	converted := int(value.Int64)
 	return &converted
+}
+
+func RetryDeployment(c *echo.Context) error {
+	id := c.Param("id")
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
+
+	var status string
+	err = db.DB.QueryRow(`
+		SELECT d.status
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		WHERE d.id = $1 AND p.user_id = $2
+	`, id, userID).Scan(&status)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"error": "deployment not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to fetch deployment",
+		})
+	}
+
+	if status != "FAILED" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "can only retry failed deployments",
+		})
+	}
+
+	result, err := db.DB.Exec(`
+		UPDATE deployments
+		SET status = 'QUEUED',
+		    attempt_count = 0,
+		    error_message = NULL,
+		    started_at = NULL,
+		    finished_at = NULL,
+		    build_duration_seconds = NULL
+		WHERE id = $1 AND status = 'FAILED'
+	`, id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to retry deployment",
+		})
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "deployment cannot be retried",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"deployment_id": id,
+	})
+}
+
+func CancelDeployment(c *echo.Context) error {
+	id := c.Param("id")
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
+
+	var status string
+	err = db.DB.QueryRow(`
+		SELECT d.status
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		WHERE d.id = $1 AND p.user_id = $2
+	`, id, userID).Scan(&status)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"error": "deployment not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to fetch deployment",
+		})
+	}
+
+	if status != "QUEUED" && status != "BUILDING" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "can only cancel queued or building deployments",
+		})
+	}
+
+	result, err := db.DB.Exec(`
+		UPDATE deployments
+		SET status = 'CANCELLED',
+		    finished_at = NOW()
+		WHERE id = $1 AND status IN ('QUEUED', 'BUILDING')
+	`, id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to cancel deployment",
+		})
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "deployment cannot be cancelled",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"deployment_id": id,
+	})
+}
+
+func RedeployDeployment(c *echo.Context) error {
+	id := c.Param("id")
+	userID, err := authenticatedUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+	}
+
+	var projectID, repoURL, buildCommand, outputDir, branch string
+	err = db.DB.QueryRow(`
+		SELECT d.project_id, d.repo_url, d.build_command, d.output_dir, d.branch
+		FROM deployments d
+		JOIN projects p ON p.id = d.project_id
+		WHERE d.id = $1 AND p.user_id = $2
+	`, id, userID).Scan(&projectID, &repoURL, &buildCommand, &outputDir, &branch)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"error": "deployment not found",
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to fetch deployment",
+		})
+	}
+
+	newID := uuid.New().String()
+	if branch == "" {
+		branch = "main"
+	}
+
+	_, err = db.DB.Exec(`
+		INSERT INTO deployments (id, project_id, repo_url, build_command, output_dir, branch, status)
+		VALUES ($1, $2, $3, $4, $5, $6, 'QUEUED')
+	`, newID, projectID, repoURL, buildCommand, outputDir, branch)
+
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "failed to create redeployment",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"deployment_id": newID,
+	})
 }
